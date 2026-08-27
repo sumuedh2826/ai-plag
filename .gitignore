@@ -1,0 +1,65 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Generated data and datasets
+data/
+datasets/
+outputs/
+artifacts/
+generated_data/
+generated_solutions/
+ai_solutions/
+_reference/
+
+# Vector indexes and embeddings
+*.faiss
+*.index
+*.npy
+*.npz
+embedding_cache/
+embeddings/
+vector_cache/
+
+# Evaluation and model artifacts
+eval_scores.json
+*_scores.json
+*_summary.csv
+*_coverage.json
+*_audit.json
+*_report.md
+*.pkl
+*.pickle
+*.joblib
+*.parquet
+
+# Runtime output
+*.log
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+*.pyc
+*.pyo
+.DS_Store
+dist/
+*.egg-info/
+.cursor/
+
+# Generated text/data exports
+*.jsonl
+*.csv
+*.tsv
+*.txt
+!requirements.txt
+!requirements-*.txt
+!constraints.txt
+
+# Temporary files
+tmp/
+temp/
+*.tmp

@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "nw-ai-code-detector"
+version = "0.1.0"
+description = "Heavy worker and Streamlit UI for AI-generated DSA code detection"
+authors = ["sumuedh2826 <sumedh.udaykole@nxtwave.co.in>"]
+packages = [{ include = "nw_ai_code_detector", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.15"
+openai = "^3.3.1"
+voyageai = "^0.5.0"
+faiss-cpu = "^1.15.0"
+tree-sitter = "^0.26.0"
+tree-sitter-cpp = "^0.23.4"
+tree-sitter-python = "^0.25.0"
+xgboost = "2.0.3"
+scikit-learn = "^1.9.0"
+numpy = "^2.5.2"
+pandas = "^3.0.5"
+tqdm = "^4.70.0"
+tenacity = "^9.1.4"
+python-dotenv = "^1.2.3"
+streamlit = "^1.62.0"
+boto3 = "1.28.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
