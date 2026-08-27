@@ -37,7 +37,8 @@ CENTROID_CACHED_HUMANS_COVERAGE_PATH = OUTPUTS_DIR / "centroid_cached_humans_cov
 PROGRESS_LOG_PATH = AI_SOLUTIONS_DIR / "_progress.jsonl"
 SELECTED_500_PATH = OUTPUTS_DIR / "selected_500.json"
 CANONICALITY_SPLIT_DIR = OUTPUTS_DIR / "canonicality_dataset_split_v1"
-HUMAN_REFERENCE_BANK_DIR = OUTPUTS_DIR / "human_reference_bank_v1"
+MODEL_DATASET_DIR = OUTPUTS_DIR / "model_dataset_v2"
+AI_REFERENCE_EVALUATION_DIR = OUTPUTS_DIR / "ai_reference_scores_v2"
 ENV_PATH = REPO_ROOT / ".env"
 
 

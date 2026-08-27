@@ -113,7 +113,7 @@ HUMAN_NEGATIVES_PER_LANGUAGE = 2
 CANONICALITY_TOP_K = 3
 FPR_OPERATING_POINTS = (0.01, 0.05)
 CANONICALITY_SPLIT_VERSION = "canonicality_dataset_split_v1"
-HUMAN_REFERENCE_BANK_VERSION = "human_reference_bank_v1"
+MODEL_DATASET_VERSION = "model_dataset_v2"
 CANONICALITY_SPLIT_SEED = SELECTION_RANDOM_SEED
 CANONICALITY_TRAIN_QUESTION_COUNT = 350
 CANONICALITY_VALIDATION_QUESTION_COUNT = 75
@@ -125,17 +125,6 @@ class DatasetSplit(str, Enum):
     TRAIN = "train"
     VALIDATION = "validation"
     INTERNAL_TEST = "internal_test"
-
-
-class HumanRole(str, Enum):
-    REFERENCE_BANK = "human_reference_bank"
-    LABELED = "labeled_human"
-
-
-class HumanBankStatus(str, Enum):
-    AVAILABLE = "available"
-    SPARSE = "sparse_human_bank"
-    UNAVAILABLE = "human_bank_unavailable"
 
 
 class EvaluationMode(str, Enum):

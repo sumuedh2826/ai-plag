@@ -105,6 +105,10 @@ def count_function_definitions(source: str, language: Language | str) -> int:
     return _count_nodes_of_type(tree.root_node, FUNCTION_NODE_TYPE)
 
 
+def validate_source_syntax(source: str, language: Language | str) -> None:
+    _parse_source(source, Language(language), "source")
+
+
 def _count_nodes_of_type(node: Node, node_type: str) -> int:
     match_count = 1 if node.type == node_type else 0
     child_counts = sum(
