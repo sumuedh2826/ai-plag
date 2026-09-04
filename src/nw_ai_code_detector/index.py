@@ -82,6 +82,33 @@ class ReferenceIndex:
             np.save(directory / f"{token.replace(':', '__')}.npy", cluster.vectors)
 
     @classmethod
+    def load(cls, directory: Path = REFERENCE_INDEX_DIR) -> ReferenceIndex:
+        manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+        raw_clusters = manifest.get("clusters")
+        if not isinstance(raw_clusters, dict) or not raw_clusters:
+            raise RuntimeError("Reference index manifest has no clusters")
+        clusters = []
+        for token, item in sorted(raw_clusters.items()):
+            if not isinstance(item, dict):
+                raise RuntimeError(f"Invalid reference cluster manifest: {token}")
+            stem = token.replace(":", "__")
+            vectors = np.asarray(np.load(directory / f"{stem}.npy"), dtype=np.float32)
+            clusters.append(
+                ClusterVectors(
+                    ClusterKey(str(item["question_id"]), str(item["language"])),
+                    tuple(int(value) for value in item["vector_ids"]),
+                    vectors,
+                )
+            )
+        return cls.from_clusters(clusters)
+
+    def write_cluster(self, key: ClusterKey, directory: Path = REFERENCE_INDEX_DIR) -> None:
+        cluster = self.get_cluster(key)
+        stem = key.token.replace(":", "__")
+        faiss.write_index(self._indexes[key.token], str(directory / f"{stem}.faiss"))
+        np.save(directory / f"{stem}.npy", cluster.vectors)
+
+    @classmethod
     def from_clusters(
         cls,
         clusters: Sequence[ClusterVectors],

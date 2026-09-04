@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from collections.abc import Sequence
+from typing import Protocol
 
 import numpy as np
 import voyageai
@@ -28,6 +29,11 @@ class EmbeddingBatch:
     cache_hits: int
     cache_misses: int
     cost_usd: float
+
+
+class TextEmbedder(Protocol):
+    def embed_texts(self, texts: Sequence[str]) -> EmbeddingBatch:
+        ...
 
 
 class VoyageEmbedder:

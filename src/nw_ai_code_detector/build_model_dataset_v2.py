@@ -39,7 +39,7 @@ from nw_ai_code_detector.stripper import (
 CANONICAL_QUESTION_SPLIT_PATH = (
     OUTPUTS_DIR / "canonicality_dataset_split_v1" / "question_split.json"
 )
-GPT_HEAVY_CANDIDATES_DIR = DATA_DIR / "ai_solutions_gpt_heavy_v2"
+GPT_HEAVY_CANDIDATES_DIR = DATA_DIR / "ai_solutions_gpt_pending"
 EXPECTED_QUESTION_COUNT = 500
 EXPECTED_MIXED_REFERENCE_COUNT = 6000
 EXPECTED_MIXED_CLUSTER_COUNT = 1000

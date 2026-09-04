@@ -11,6 +11,7 @@ from nw_ai_code_detector.stripper import (
     SourceParseError,
     StripResult,
     parses_source,
+    remove_comments_and_docstrings,
     strip_solution,
     strip_solution_body,
 )
@@ -56,7 +57,10 @@ def main() -> None:
 
     print(f"\n{'=' * 88}")
     print(f"All {len(samples) * 2} stripped outputs parse under Tree-sitter.")
-    print("No stripped line differs from its raw line except leading indentation.")
+    print(
+        "No stripped line differs from comment-free raw code except leading "
+        "indentation and existing trailing-whitespace normalization."
+    )
     print("No blank lines were inserted between adjacent raw content lines.")
     print(f"Skipped candidates by reason: {dict(sorted(skip_counts.items()))}")
     print(
@@ -296,12 +300,14 @@ def _check_lines_preserved(
     stripped_code: str,
     raw_code: str,
 ) -> None:
-    raw_lines = {" ".join(line.split()) for line in raw_code.splitlines()}
+    comment_free_raw = remove_comments_and_docstrings(raw_code, sample.language)
+    raw_lines = {_line_key(line) for line in comment_free_raw.splitlines()}
     for line in stripped_code.splitlines():
-        collapsed_line = " ".join(line.split())
-        if collapsed_line and collapsed_line not in raw_lines:
+        line_key = _line_key(line)
+        if line_key and line_key not in raw_lines:
             raise AssertionError(
-                f"{sample.question_id}: stripped line not present in raw code: {line!r}"
+                f"{sample.question_id}: stripped line differs from comment-free "
+                f"raw code beyond indentation: {line!r}"
             )
 
 
@@ -310,7 +316,8 @@ def _check_no_inserted_blanks(
     stripped_code: str,
     raw_code: str,
 ) -> None:
-    raw_keys = [_line_key(line) for line in raw_code.splitlines()]
+    comment_free_raw = remove_comments_and_docstrings(raw_code, sample.language)
+    raw_keys = [_line_key(line) for line in comment_free_raw.splitlines()]
     stripped_keys = [_line_key(line) for line in stripped_code.splitlines()]
     content_pairs = _consecutive_content_spans(stripped_keys)
     search_from = 0
@@ -332,7 +339,7 @@ def _check_no_inserted_blanks(
 
 
 def _line_key(line: str) -> str:
-    return " ".join(line.split())
+    return line.strip()
 
 
 def _consecutive_content_spans(

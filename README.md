@@ -59,3 +59,45 @@ The detector mirrors the existing plagiarism plugin, so integration points stay 
 | worker | `nw-ai-code-detector` (this repo) |
 
 All heavy ML stays in this worker repo.
+
+## Scoring eligibility
+
+The worker runs **strip → eligibility → (eligible only) Voyage embed → exact `(qid, lang)` cluster
+score**. Eligibility is not a silent drop, a 0.5 fill, or a score cap.
+
+We **only score submissions that are 100% correct and parseable**. We do **not** attempt to score
+partial, wrong, or error solutions. That is a firm product decision, not a data gap.
+
+Integrity checks run first. Failure is `{status: missing_or_invalid, score: null, decision: null}`:
+
+| Check | Rule |
+| --- | --- |
+| Language | Supported languages only: `CPP` and `PYTHON`. |
+| Stripped body | `stripped_code` exists after the stripper runs. |
+| Parse | Stripped body parses cleanly under Tree-sitter (`root_node.has_error` → skip). |
+| Tokens | Tokenization of the stripped body succeeds. |
+| Cluster | An exact mixed-v1 cluster exists for `(question_id, language)`. |
+
+Then the significant-token floor (`significant_code_token_count`). Below the floor the worker
+abstains **before** calling Voyage:
+
+`{status: "insufficient_evidence", reason: "insufficient_tokens", score: null, decision: null}`
+
+Thresholds are provisional, to be validated against a labeled test set: **CPP ≥ 80**, **PYTHON ≥ 60**.
+
+Entropy is not part of eligibility. It belongs to later calibration/confidence on the score.
+
+### Skip reasons (kept as-is)
+
+| Reason | What happens | Rationale (real examples) |
+| --- | --- | --- |
+| Function-name mismatch | Skip | Author renamed the boilerplate function (e.g. `findluminary` vs `findCelebrity` on `0179f157`). The program can be correct but is not routable to the expected target. **Kept as-is by decision.** |
+| Compiles in a compiler, not in Tree-sitter | Skip | Tree-sitter `has_error` is the parseability check. A C++ submission can compile with `#define` macros and still fail the grammar (e.g. `39ee164e`). **Compiles ≠ parses.** |
+| Truncated / empty / broken raw | Skip | Unparseable or empty source cannot be stripped or embedded (e.g. held-out `79bf23ea` truncated, `9b5fad86` empty, `a48eb2fe` incomplete `if`). |
+
+### Calibration (later, not an eligibility exclude)
+
+Short solutions that exact-match an AI reference (for example a ~25-token one-liner) are a known
+low-confidence case. They stay in the scored set. Confidence handling belongs in the **calibration**
+layer, not in this integrity gate.
+

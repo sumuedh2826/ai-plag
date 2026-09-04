@@ -39,6 +39,34 @@ SELECTED_500_PATH = OUTPUTS_DIR / "selected_500.json"
 CANONICALITY_SPLIT_DIR = OUTPUTS_DIR / "canonicality_dataset_split_v1"
 MODEL_DATASET_DIR = OUTPUTS_DIR / "model_dataset_v2"
 AI_REFERENCE_EVALUATION_DIR = OUTPUTS_DIR / "ai_reference_scores_v2"
+CANONICALITY_ELIGIBILITY_DIR = OUTPUTS_DIR / "canonicality_eligibility_v1"
+# Token counts and very-short floors (CPP>=70, PYTHON>=55) live here.
+# Raised from CPP 80 / PYTHON 60; re-check against a labeled test set.
+SIGNIFICANT_TOKEN_ELIGIBILITY_DIR = OUTPUTS_DIR / "canonicality_eligibility_tokens"
+STYLE_SIGNALS_DIR = OUTPUTS_DIR / "style_signals_v0"
+DISCOUNT_LAYER_DIR = OUTPUTS_DIR / "discount_layer_v0"
+DETECTOR_CONSENSUS_DIR = OUTPUTS_DIR / "detector_consensus"
+DETECTOR_CONSENSUS_LABELS_PATH = (
+    DETECTOR_CONSENSUS_DIR / "proxy_labels_detector_consensus.jsonl"
+)
+DETECTOR_CONSENSUS_CACHE_DIR = DETECTOR_CONSENSUS_DIR / "api_cache"
+DETECTOR_CONSENSUS_PROGRESS_PATH = DETECTOR_CONSENSUS_DIR / "_progress.jsonl"
+DETECTOR_CONSENSUS_MANUAL_BATCH_DIR = DETECTOR_CONSENSUS_DIR / "manual_batch"
+DETECTOR_CONSENSUS_MANUAL_RESULTS_CSV = (
+    DETECTOR_CONSENSUS_DIR / "manual_detector_results.csv"
+)
+DETECTOR_CONSENSUS_REPORT_PATH = DETECTOR_CONSENSUS_DIR / "proxy_label_report.json"
+HELDOUT_AI_SIMILARITY_SAMPLES_PATH = REPO_ROOT / "heldout_ai_similarity_samples.txt"
+CANDIDATE_HUMAN_SIMILARITY_SAMPLES_PATH = (
+    REPO_ROOT / "candidate_human_similarity_samples.txt"
+)
+CANDIDATE_HUMAN_RAW_SAMPLES_PATH = (
+    REPO_ROOT / "candidate_human_similarity_samples_raw.txt"
+)
+CANDIDATE_HUMAN_TOKEN_RAW_SAMPLES_PATH = (
+    REPO_ROOT / "candidate_human_token_similarity_samples_raw.txt"
+)
+HELDOUT_AI_RAW_SAMPLES_PATH = REPO_ROOT / "heldout_ai_similarity_samples_raw.txt"
 ENV_PATH = REPO_ROOT / ".env"
 
 

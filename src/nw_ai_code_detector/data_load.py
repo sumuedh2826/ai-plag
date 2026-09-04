@@ -64,11 +64,10 @@ def load_dataset(data_dir: Path | None = None) -> Dataset:
     if missing_paths:
         raise FileNotFoundError(WAITING_FOR_DATA_MESSAGE)
 
-    questions_payload = _load_json(root / QUESTIONS_FILENAME)
+    questions = load_questions(root / QUESTIONS_FILENAME)
     submissions_payload = _load_json(root / SCORED_SUBMISSIONS_FILENAME)
     coverage_payload = _load_json(root / COVERAGE_FILENAME)
     manifest_payload = _load_json(root / MANIFEST_FILENAME)
-    questions = _parse_questions(_as_mapping(questions_payload, QUESTIONS_FILENAME))
     counts = _count_human_submissions(submissions_payload)
     return Dataset(
         questions=questions,
@@ -76,6 +75,11 @@ def load_dataset(data_dir: Path | None = None) -> Dataset:
         coverage=_as_mapping(coverage_payload, COVERAGE_FILENAME),
         manifest=_as_mapping(manifest_payload, MANIFEST_FILENAME),
     )
+
+
+def load_questions(path: Path) -> dict[str, QuestionRecord]:
+    payload = _load_json(path)
+    return _parse_questions(_as_mapping(payload, QUESTIONS_FILENAME))
 
 
 def missing_data_files(data_dir: Path | None = None) -> list[Path]:

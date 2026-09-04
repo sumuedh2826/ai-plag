@@ -29,6 +29,8 @@ CPP_DECLARATOR_NAME_TYPES = frozenset({"field_identifier", "identifier", "operat
 STRUCTURAL_PUNCTUATION_LINES = frozenset({"{", "}", "};", "{}"})
 CPP_TERMINATOR_TOKENS = frozenset({":", ";"})
 FUNCTION_NODE_TYPE = "function_definition"
+COMMENT_NODE_TYPE = "comment"
+PYTHON_STRING_NODE_TYPES = frozenset({"string", "concatenated_string"})
 PYTHON_CPP_COMMENT_PATTERN = re.compile(r"(?m)^([ \t]*)//")
 
 
@@ -76,6 +78,7 @@ def strip_solution(
         chunks.extend(_extract_node_chunks(child, context))
     chunk_texts = [chunk.strip("\n") for chunk in chunks if chunk.strip()]
     stripped_code = _normalize_lightly("\n".join(chunk_texts))
+    stripped_code = remove_comments_and_docstrings(stripped_code, source_language)
     if not stripped_code:
         raise ValueError("No author-written code remains after stripping boilerplate")
 
@@ -109,12 +112,68 @@ def validate_source_syntax(source: str, language: Language | str) -> None:
     _parse_source(source, Language(language), "source")
 
 
+def remove_comments_and_docstrings(
+    source: str,
+    language: Language | str,
+) -> str:
+    source_language = Language(language)
+    parse_source = _sanitize_source_for_parsing(source, source_language)
+    tree = _parser(source_language).parse(parse_source.encode("utf-8"))
+    removable_ranges = _removable_comment_ranges(tree.root_node, source_language)
+    cleaned = _blank_source_ranges(source, removable_ranges)
+    return _normalize_lightly(cleaned)
+
+
 def _count_nodes_of_type(node: Node, node_type: str) -> int:
     match_count = 1 if node.type == node_type else 0
     child_counts = sum(
         _count_nodes_of_type(child, node_type) for child in node.named_children
     )
     return match_count + child_counts
+
+
+def _removable_comment_ranges(
+    node: Node,
+    language: Language,
+) -> tuple[tuple[int, int], ...]:
+    ranges: list[tuple[int, int]] = []
+    if node.type == COMMENT_NODE_TYPE:
+        ranges.append((node.start_byte, node.end_byte))
+    elif language is Language.PYTHON and _is_python_docstring(node):
+        ranges.append((node.start_byte, node.end_byte))
+    else:
+        for child in node.named_children:
+            ranges.extend(_removable_comment_ranges(child, language))
+    return tuple(ranges)
+
+
+def _is_python_docstring(node: Node) -> bool:
+    if node.type != "expression_statement" or not node.named_children:
+        return False
+    expression = node.named_children[0]
+    if expression.type not in PYTHON_STRING_NODE_TYPES:
+        return False
+    parent = node.parent
+    if parent is None:
+        return False
+    statements = [
+        child
+        for child in parent.named_children
+        if child.type != COMMENT_NODE_TYPE
+    ]
+    return bool(statements) and statements[0] == node
+
+
+def _blank_source_ranges(
+    source: str,
+    ranges: tuple[tuple[int, int], ...],
+) -> str:
+    source_bytes = bytearray(source.encode("utf-8"))
+    for start_byte, end_byte in ranges:
+        for index in range(start_byte, end_byte):
+            if source_bytes[index] not in (10, 13):
+                source_bytes[index] = 32
+    return source_bytes.decode("utf-8")
 
 
 def _build_strip_context(

@@ -58,6 +58,12 @@ dist/
 !requirements.txt
 !requirements-*.txt
 !constraints.txt
+/ai_detector_samples.txt
+/heldout_ai_similarity_samples.txt
+/candidate_human_similarity_samples.txt
+/candidate_human_similarity_samples_raw.txt
+/heldout_ai_similarity_samples_raw.txt
+/candidate_human_token_similarity_samples_raw.txt
 
 # Temporary files
 tmp/

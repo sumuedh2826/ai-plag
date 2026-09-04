@@ -1,0 +1,1 @@
+"""Standalone internal detector demo."""
