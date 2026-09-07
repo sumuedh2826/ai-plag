@@ -6,8 +6,10 @@ from collections.abc import Sequence
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
-from nw_ai_code_detector.constants import CANONICALITY_TOP_K, FPR_OPERATING_POINTS
+from nw_ai_code_detector.constants import FPR_OPERATING_POINTS
 from nw_ai_code_detector.index import ClusterKey, ReferenceIndex
+
+NN_NEIGHBOR_COUNT = 1
 
 
 @dataclass(frozen=True)
@@ -17,7 +19,6 @@ class ScoredItem:
     label: str
     source: str
     nn_score: float
-    topk_mean_score: float
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,6 @@ class LanguageMetrics:
     n_negatives: int
     excluded_pairs: int
     auroc_nn: float | None
-    auroc_topk_mean: float | None
     recall_at_fpr: dict[str, float | None]
     positive_nn_mean: float | None
     negative_nn_mean: float | None
@@ -39,11 +39,9 @@ def score_item(
     index: ReferenceIndex,
     key: ClusterKey,
     vector: Sequence[float],
-) -> tuple[float, float]:
-    scores = index.search(key, vector, CANONICALITY_TOP_K)
-    nn_score = scores[0]
-    topk_mean_score = float(np.mean(scores))
-    return nn_score, topk_mean_score
+) -> float:
+    scores = index.search(key, vector, NN_NEIGHBOR_COUNT)
+    return scores[0]
 
 
 def metrics_for_items(
@@ -58,8 +56,6 @@ def metrics_for_items(
     ]
     positives = [item.nn_score for item in scoped if item.label == "ai"]
     negatives = [item.nn_score for item in scoped if item.label == "human"]
-    topk_positives = [item.topk_mean_score for item in scoped if item.label == "ai"]
-    topk_negatives = [item.topk_mean_score for item in scoped if item.label == "human"]
     language_label = language or "COMBINED"
     if not positives or not negatives:
         return _empty_metrics(language_label, excluded_pairs, len(positives), len(negatives))
@@ -73,7 +69,6 @@ def metrics_for_items(
         n_negatives=len(negatives),
         excluded_pairs=excluded_pairs,
         auroc_nn=_auroc(positives, negatives),
-        auroc_topk_mean=_auroc(topk_positives, topk_negatives),
         recall_at_fpr=recall,
         positive_nn_mean=float(np.mean(positives)),
         negative_nn_mean=float(np.mean(negatives)),
@@ -127,7 +122,6 @@ def _empty_metrics(
         n_negatives=n_negatives,
         excluded_pairs=excluded_pairs,
         auroc_nn=None,
-        auroc_topk_mean=None,
         recall_at_fpr={f"{int(fpr * 100)}%": None for fpr in FPR_OPERATING_POINTS},
         positive_nn_mean=None,
         negative_nn_mean=None,

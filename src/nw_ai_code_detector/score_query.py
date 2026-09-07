@@ -69,10 +69,9 @@ class CanonicalityReading:
     stripped: str
     token_count: int
     canonicality: float
-    top3_mean: float
     cluster_diversity: float
     query_vector: tuple[float, ...]
-    reference_vectors: np.ndarray
+    reference_vectors: object
 
 
 @dataclass(frozen=True)
@@ -120,12 +119,11 @@ def score_submission(
         )
     batch = embedder.embed_texts((stripped,))
     key = ClusterKey(request.question_id, request.language)
-    nn_score, top3_mean = score_item(index, key, batch.vectors[0])
+    nn_score = score_item(index, key, batch.vectors[0])
     reading = CanonicalityReading(
         stripped,
         token_count or 0,
         nn_score,
-        top3_mean,
         diversity,
         batch.vectors[0],
         index.get_cluster(key).vectors,
@@ -154,13 +152,11 @@ def _scored_result(
     assessment = assess_canonicality(
         CanonicalityDiscountRequest(
             reading.canonicality,
-            reading.top3_mean,
             reading.token_count,
             request.language,
             reading.cluster_diversity,
             commented,
             naming.frac_descriptive,
-            naming.convention_frac,
         )
     )
     match = find_nearest_generated_reference_from_cluster(

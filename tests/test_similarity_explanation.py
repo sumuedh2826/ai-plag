@@ -10,8 +10,7 @@ from nw_ai_code_detector.discount_layer import (
     CanonicalityAssessment,
     CommentedOutDiscount,
     ConfidenceRouting,
-    ConventionRaise,
-    DescriptiveRaise,
+    DescriptiveNaming,
 )
 from nw_ai_code_detector.similarity_explanation import (
     NearestReferenceMatch,
@@ -49,12 +48,10 @@ class SimilarityExplanationTests(unittest.TestCase):
         reading = CanonicalityAssessment(
             routing,
             0.96,
-            0.94,
             80,
             0.08,
             CommentedOutDiscount(False, 0.0),
-            DescriptiveRaise(False, False, 0.0, 0.1),
-            ConventionRaise(0.0, False, 0.0),
+            DescriptiveNaming(False, 0.1),
             1.0,
             0.96,
             None,
@@ -69,12 +66,10 @@ def _assessment():
     return CanonicalityAssessment(
         routing,
         0.96,
-        0.94,
         120,
         0.08,
         CommentedOutDiscount(False, 0.0),
-        DescriptiveRaise(False, False, 0.0, 0.1),
-        ConventionRaise(0.0, False, 0.0),
+        DescriptiveNaming(False, 0.1),
         1.0,
         0.96,
         None,

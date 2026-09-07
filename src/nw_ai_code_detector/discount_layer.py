@@ -28,13 +28,11 @@ from nw_ai_code_detector.constants import (
 @dataclass(frozen=True)
 class CanonicalityDiscountRequest:
     raw_canonicality: float
-    top3_mean: float
     token_count: int
     language: str
     cluster_diversity: float
     commented_out_code_present: bool
     frac_descriptive: float
-    convention_frac: float
 
 
 @dataclass(frozen=True)
@@ -52,30 +50,19 @@ class CommentedOutDiscount:
 
 
 @dataclass(frozen=True)
-class DescriptiveRaise:
+class DescriptiveNaming:
     high: bool
-    applied: bool
-    amount: float
     frac_descriptive: float
-
-
-@dataclass(frozen=True)
-class ConventionRaise:
-    frac: float
-    applied: bool
-    amount: float
 
 
 @dataclass(frozen=True)
 class CanonicalityAssessment:
     routing: ConfidenceRouting
     raw_canonicality: float
-    top3_mean: float
     token_count: int
     cluster_diversity: float
     commented_out_code: CommentedOutDiscount
-    descriptive_raise: DescriptiveRaise
-    convention_raise: ConventionRaise
+    descriptive_naming: DescriptiveNaming
     remaining_factor: float
     score: float | None
     confidence: str | None
@@ -99,18 +86,15 @@ def assess_canonicality(request: CanonicalityDiscountRequest) -> CanonicalityAss
     """Route unscoreable cases out; discount commented-out code; naming is confidence-only."""
     routing = _confidence_routing(request.token_count, request.language, request.cluster_diversity)
     commented_out = _commented_out_discount(request.commented_out_code_present)
-    descriptive = _descriptive_reading(request.frac_descriptive)
-    convention = _convention_raise(request.convention_frac)
+    descriptive = _descriptive_naming(request.frac_descriptive)
     if routing.status not in HAS_CANONICALITY_SCORE_STATUSES:
         return CanonicalityAssessment(
             routing,
             request.raw_canonicality,
-            request.top3_mean,
             request.token_count,
             request.cluster_diversity,
             commented_out,
             descriptive,
-            convention,
             1.0,
             None,
             None,
@@ -124,12 +108,10 @@ def assess_canonicality(request: CanonicalityDiscountRequest) -> CanonicalityAss
     return CanonicalityAssessment(
         routing,
         request.raw_canonicality,
-        request.top3_mean,
         request.token_count,
         request.cluster_diversity,
         commented_out,
         descriptive,
-        convention,
         remaining,
         score,
         confidence,
@@ -182,13 +164,9 @@ def _commented_out_discount(present: bool) -> CommentedOutDiscount:
     return CommentedOutDiscount(present, discount)
 
 
-def _descriptive_reading(frac_descriptive: float) -> DescriptiveRaise:
+def _descriptive_naming(frac_descriptive: float) -> DescriptiveNaming:
     high = frac_descriptive >= DESCRIPTIVE_RAISE_FLOOR
-    return DescriptiveRaise(high, False, 0.0, frac_descriptive)
-
-
-def _convention_raise(convention_frac: float) -> ConventionRaise:
-    return ConventionRaise(convention_frac, False, 0.0)
+    return DescriptiveNaming(high, frac_descriptive)
 
 
 def _naming_confidence_label(score: float, frac_descriptive: float) -> str | None:

@@ -175,14 +175,12 @@ def _score_row(
     naming = naming_fractions(parts.stripped_code, parts.language)
     assessment = assess_canonicality(
         CanonicalityDiscountRequest(
-            pair[0],
-            pair[1],
+            pair,
             parts.token_count,
             parts.language,
             cluster_diversity,
             commented,
             naming.frac_descriptive,
-            naming.convention_frac,
         )
     )
     return DiscountEvalRow(
@@ -204,8 +202,7 @@ def _canonicality_pair(question_id: str, language: str, stripped: str, clusters)
     query = np.asarray(vector, dtype=np.float32)
     similarities = np.sort(np.asarray(cluster.vectors @ query, dtype=np.float64))[::-1]
     maximum = float(similarities[0])
-    top3 = float(np.mean(similarities[: min(3, len(similarities))]))
-    return maximum, top3
+    return maximum
 
 
 def _safe_token_count(stripped: str, language: str) -> int | None:
@@ -358,9 +355,9 @@ def _language_report(
 def _descriptive_trigger_rates(rows: Sequence[DiscountEvalRow]) -> dict[str, object]:
     total = len(rows)
     denom = total or 1
-    high = sum(1 for row in rows if row.reading.descriptive_raise.high)
+    high = sum(1 for row in rows if row.reading.descriptive_naming.high)
     scored = [row for row in rows if _is_scored(row)]
-    scored_high = sum(1 for row in scored if row.reading.descriptive_raise.high)
+    scored_high = sum(1 for row in scored if row.reading.descriptive_naming.high)
     scored_n = len(scored) or 1
     return {
         "n": total,
@@ -371,7 +368,7 @@ def _descriptive_trigger_rates(rows: Sequence[DiscountEvalRow]) -> dict[str, obj
             "scoreable_n": len(scored),
         },
         "frac_descriptive_mean": _mean(
-            [row.reading.descriptive_raise.frac_descriptive for row in rows]
+            [row.reading.descriptive_naming.frac_descriptive for row in rows]
         ),
     }
 
@@ -431,9 +428,8 @@ def _labeled_human_payload(item, reading: CanonicalityAssessment) -> tuple[bool,
         "language": item.language,
         "raw_canonicality": reading.raw_canonicality,
         "commented_out_discount": reading.commented_out_code.discount,
-        "frac_descriptive": reading.descriptive_raise.frac_descriptive,
-        "descriptive_high": reading.descriptive_raise.high,
-        "descriptive_raise": reading.descriptive_raise.amount,
+        "frac_descriptive": reading.descriptive_naming.frac_descriptive,
+        "descriptive_high": reading.descriptive_naming.high,
         "confidence": reading.confidence,
         "score": production,
         "band": illustrative_unlocked_band(production),
@@ -578,15 +574,13 @@ def _example_payload(row: DiscountEvalRow, reason: str) -> dict[str, object]:
         "status": reading.routing.status,
         "reason": reading.routing.reason,
         "raw_canonicality": reading.raw_canonicality,
-        "top3_mean": reading.top3_mean,
         "token_count": reading.token_count,
         "cluster_diversity": reading.cluster_diversity,
         "short_code_below_floor": reading.routing.short_code_below_floor,
         "low_cluster_diversity": reading.routing.low_cluster_diversity,
         "commented_out_code_present": reading.commented_out_code.present,
         "human_discount": reading.commented_out_code.discount,
-        "frac_descriptive": reading.descriptive_raise.frac_descriptive,
-        "descriptive_raise": reading.descriptive_raise.amount,
+        "frac_descriptive": reading.descriptive_naming.frac_descriptive,
         "remaining_factor": reading.remaining_factor,
         "score": reading.score,
         "raw_excerpt": "\n".join(row.raw_code.splitlines()[:16]),

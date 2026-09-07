@@ -218,7 +218,7 @@ def _score_eval_items(
         pair = (record.question_id, record.language)
         if pair not in human_pairs:
             continue
-        nn_score, topk_mean = score_item(
+        nn_score = score_item(
             index,
             ClusterKey(record.question_id, record.language),
             vector,
@@ -230,7 +230,6 @@ def _score_eval_items(
                 label="ai" if record.role == "held_out" else "human",
                 source=record.source,
                 nn_score=nn_score,
-                topk_mean_score=topk_mean,
             )
         )
     return scored, excluded
@@ -291,7 +290,7 @@ def _print_results(
     print(f"wall_clock_s={elapsed:.1f}")
     print(
         f"{'lang':<10} {'n_pos':>6} {'n_neg':>6} {'excl':>5} "
-        f"{'AUROC_nn':>9} {'AUROC_k':>9} {'R@1%':>7} {'R@5%':>7} "
+        f"{'AUROC_nn':>9} {'R@1%':>7} {'R@5%':>7} "
         f"{'pos_mean':>9} {'neg_mean':>9}"
     )
     for row in rows:
@@ -305,7 +304,7 @@ def _format_metrics_row(row: LanguageMetrics) -> str:
     return (
         f"{row.language:<10} {row.n_positives:6d} {row.n_negatives:6d} "
         f"{row.excluded_pairs:5d} {_fmt(row.auroc_nn):>9} "
-        f"{_fmt(row.auroc_topk_mean):>9} {_fmt(row.recall_at_fpr.get('1%')):>7} "
+        f"{_fmt(row.recall_at_fpr.get('1%')):>7} "
         f"{_fmt(row.recall_at_fpr.get('5%')):>7} {_fmt(row.positive_nn_mean):>9} "
         f"{_fmt(row.negative_nn_mean):>9}"
     )

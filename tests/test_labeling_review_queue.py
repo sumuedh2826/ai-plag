@@ -151,7 +151,7 @@ class ScoreableBatchSelectionTests(unittest.TestCase):
         self.assertNotIn(rows[0].record_id, selected_ids)
         self.assertNotIn(rows[1].record_id, selected_ids)
 
-    def test_balances_language_difficulty_and_descriptive(self):
+    def test_balances_language_and_difficulty(self):
         rows = self._scoreable_pool()
         selected = select_scoreable_batch(rows, self._spec(), set(), set())
         self.assertEqual(len(selected), 150)
@@ -162,9 +162,6 @@ class ScoreableBatchSelectionTests(unittest.TestCase):
         for language in ("CPP", "PYTHON"):
             for difficulty in ("EASY", "MEDIUM", "HARD"):
                 self.assertGreaterEqual(cells[(language, difficulty)], 15)
-        flagged = sum(1 for row in selected if row.descriptive_raise)
-        self.assertGreaterEqual(flagged, 20)
-        self.assertLessEqual(flagged, 30)
 
     def test_same_seed_is_stable(self):
         rows = self._scoreable_pool()
@@ -173,7 +170,7 @@ class ScoreableBatchSelectionTests(unittest.TestCase):
         self.assertEqual(first, second)
 
     def _spec(self):
-        return ScoreableBatchSpec(150, 15042, 75, 25, 18, 15, 12)
+        return ScoreableBatchSpec(150, 15042, 75, 15, 12)
 
     def _scoreable_pool(self):
         rows = []
@@ -181,7 +178,6 @@ class ScoreableBatchSelectionTests(unittest.TestCase):
         for language in ("CPP", "PYTHON"):
             for difficulty in ("EASY", "MEDIUM", "HARD"):
                 for inner in range(40):
-                    flagged = inner < 8
                     rows.append(
                         ScoreableReviewRecord(
                             f"candidate_human|q{index}|{language}|0|h{index}",
@@ -193,8 +189,7 @@ class ScoreableBatchSelectionTests(unittest.TestCase):
                             f"h{index}",
                             0.80 + (inner / 100),
                             False,
-                            flagged,
-                            0.5 if flagged else 0.1,
+                            0.5 if inner < 8 else 0.1,
                         )
                     )
                     index += 1

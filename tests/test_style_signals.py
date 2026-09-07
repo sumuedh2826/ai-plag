@@ -235,24 +235,6 @@ public:
         self.assertEqual(raised.unique_identifier_count, 2)
         self.assertEqual(raised.frac_descriptive, 1.0)
 
-    def test_convention_frac_is_camel_for_cpp_and_snake_for_python(self):
-        camel = naming_fractions(
-            """class solution {
-public:
-    int solve(int values) {
-        int maxNode = 0;
-        int nextNode = values;
-        int prev = maxNode + nextNode;
-        return prev;
-    }
-};
-""",
-            "CPP",
-        )
-        snake = naming_fractions(PYTHON_UNIFORM, "PYTHON")
-        self.assertGreater(camel.convention_frac, 0.42)
-        self.assertGreater(snake.convention_frac, 0.42)
-
 
 class RankAndFlagQueryTests(unittest.TestCase):
     def test_short_python_abstains_without_verdict(self):

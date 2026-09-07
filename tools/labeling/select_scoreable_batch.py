@@ -30,8 +30,6 @@ from tools.labeling.constants import (
     LABELS_BACKUP_NAME,
     MANUAL_LABELS_PATH,
     REVIEW_QUEUE_PATH,
-    SCOREABLE_BATCH_DESCRIPTIVE_COUNT,
-    SCOREABLE_BATCH_DESCRIPTIVE_PYTHON_COUNT,
     SCOREABLE_BATCH_MIN_PER_LANGUAGE_DIFFICULTY,
     SCOREABLE_BATCH_MIN_PER_SCORE_TERTILE,
     SCOREABLE_BATCH_PYTHON_COUNT,
@@ -58,7 +56,6 @@ class ScoreableReviewRecord:
     stripped_hash: str
     ai_nn_max_raw: float
     exact_match_to_ai: bool
-    descriptive_raise: bool
     frac_descriptive: float
 
 
@@ -67,8 +64,6 @@ class ScoreableBatchSpec:
     size: int
     seed: int
     python_count: int
-    descriptive_count: int
-    descriptive_python_count: int
     min_per_language_difficulty: int
     min_per_score_tertile: int
 
@@ -99,7 +94,6 @@ def select_scoreable_batch(
     state = _SelectionState(
         eligible, [], set(), rng, spec, {row.record_id: row for row in eligible}
     )
-    _add_descriptive_slice(state)
     _fill_language_difficulty_floors(state)
     _fill_score_tertiles(state)
     _fill_language_targets(state)
@@ -126,8 +120,6 @@ def main() -> int:
         SCOREABLE_BATCH_SIZE,
         SCOREABLE_BATCH_SEED,
         SCOREABLE_BATCH_PYTHON_COUNT,
-        SCOREABLE_BATCH_DESCRIPTIVE_COUNT,
-        SCOREABLE_BATCH_DESCRIPTIVE_PYTHON_COUNT,
         SCOREABLE_BATCH_MIN_PER_LANGUAGE_DIFFICULTY,
         SCOREABLE_BATCH_MIN_PER_SCORE_TERTILE,
     )
@@ -154,7 +146,7 @@ def load_scoreable_candidates() -> list[ScoreableReviewRecord]:
             continue
         if not _passes_scoreable_gates(item, match):
             continue
-        raise_info = match["descriptive_raise"]
+        naming = match.get("descriptive_naming") or match.get("descriptive_raise") or {}
         rows.append(
             ScoreableReviewRecord(
                 item.record_id,
@@ -166,8 +158,7 @@ def load_scoreable_candidates() -> list[ScoreableReviewRecord]:
                 item.stripped_hash,
                 item.ai_nn_max_raw,
                 item.exact_match_to_ai,
-                bool(raise_info["high"]),
-                float(raise_info["frac_descriptive"]),
+                float(naming.get("frac_descriptive") or 0.0),
             )
         )
     return rows
@@ -184,7 +175,6 @@ def write_scoreable_queue(
         "size": len(items),
         "selection": "scoreable_locked_config_balanced",
         "python_count": spec.python_count,
-        "descriptive_count": spec.descriptive_count,
         "min_per_language_difficulty": spec.min_per_language_difficulty,
         "min_per_score_tertile": spec.min_per_score_tertile,
         "items": items,
@@ -194,18 +184,6 @@ def write_scoreable_queue(
         _reject_identity_keys(item)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-
-def _add_descriptive_slice(state: _SelectionState) -> None:
-    flagged = [row for row in state.eligible if row.descriptive_raise]
-    python_rows = [row for row in flagged if row.language == "PYTHON"]
-    cpp_rows = [row for row in flagged if row.language == "CPP"]
-    state.rng.shuffle(python_rows)
-    state.rng.shuffle(cpp_rows)
-    python_take = min(state.spec.descriptive_python_count, len(python_rows))
-    cpp_take = min(state.spec.descriptive_count - python_take, len(cpp_rows))
-    for row in python_rows[:python_take] + cpp_rows[:cpp_take]:
-        _try_add(state, row)
 
 
 def _fill_language_difficulty_floors(state: _SelectionState) -> None:
@@ -262,17 +240,9 @@ def _try_add(state: _SelectionState, row: ScoreableReviewRecord) -> bool:
         return False
     if _language_count(state, row.language) >= _language_cap(state.spec, row.language):
         return False
-    if row.descriptive_raise and _flagged_count(state) >= state.spec.descriptive_count:
-        return False
     state.selected_ids.append(row.record_id)
     state.selected.add(row.record_id)
     return True
-
-
-def _flagged_count(state: _SelectionState) -> int:
-    return sum(
-        1 for record_id in state.selected_ids if state.by_id[record_id].descriptive_raise
-    )
 
 
 def _language_cap(spec: ScoreableBatchSpec, language: str) -> int:
@@ -420,7 +390,6 @@ def _with_current_hash(row: ScoreableReviewRecord, dataset, mapping) -> Scoreabl
         current_hash,
         row.ai_nn_max_raw,
         row.exact_match_to_ai,
-        row.descriptive_raise,
         row.frac_descriptive,
     )
 
@@ -466,7 +435,6 @@ def _queue_item(index: int, row: ScoreableReviewRecord) -> dict[str, object]:
         "significant_code_token_count": row.significant_code_token_count,
         "ai_nn_max_raw": row.ai_nn_max_raw,
         "exact_match_to_ai": row.exact_match_to_ai,
-        "descriptive_raise": row.descriptive_raise,
         "frac_descriptive": row.frac_descriptive,
     }
 
@@ -489,7 +457,6 @@ def _print_report(
 ) -> None:
     languages = Counter(row.language for row in selected)
     cells = Counter((row.language, row.difficulty) for row in selected)
-    flagged = sum(1 for row in selected if row.descriptive_raise)
     overlap = [row.record_id for row in selected if row.record_id in labels]
     locators = {(row.question_id, row.language, row.group_index) for row in selected}
     labeled_locators = {_locator_from_record_id(record_id) for record_id in labels}
@@ -500,7 +467,6 @@ def _print_report(
         "cells="
         + str({f"{lang}:{diff}": count for (lang, diff), count in sorted(cells.items())})
     )
-    print(f"descriptive_raise={flagged}")
     print(f"record_id_overlap={len(overlap)}")
     print(f"locator_overlap={len(locator_overlap)}")
     print(f"labels_count={len(labels)} digest={labels_digest}")

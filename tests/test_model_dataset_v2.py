@@ -46,8 +46,8 @@ def _manifest(
     )
 
 
-def _scored(row, maximum, top3, exact=False):
-    return evaluation.ScoredRow(row, maximum, top3, top3, exact)
+def _scored(row, maximum, exact=False):
+    return evaluation.ScoredRow(row, maximum, exact)
 
 
 class ModelDatasetIntegrationTests(unittest.TestCase):
@@ -181,7 +181,6 @@ class AiReferenceScoreTests(unittest.TestCase):
         self.cluster = evaluation.ReferenceCluster(
             ClusterKey("q1", "CPP"),
             vectors,
-            vectors[[0, 2, 3, 4, 5]],
             hashes,
         )
 
@@ -202,41 +201,31 @@ class AiReferenceScoreTests(unittest.TestCase):
 
     def test_maximum_matches_brute_force_cosine(self):
         query = _unit([0.9, 0.1, 0.0, 0.0])
-        maximum, _top3, _logical = evaluation.score_candidate(query, self.cluster)
+        maximum = evaluation.score_candidate(query, self.cluster)
         self.assertAlmostEqual(maximum, float(np.max(self.cluster.vectors @ query)))
-
-    def test_top_three_matches_distinct_vector_average(self):
-        query = _unit([0.9, 0.1, 0.0, 0.0])
-        _maximum, top3, _logical = evaluation.score_candidate(query, self.cluster)
-        expected = float(np.mean(np.sort(self.cluster.distinct_vectors @ query)[-3:]))
-        self.assertAlmostEqual(top3, expected)
 
     def test_repeated_identical_vectors_do_not_change_maximum(self):
         query = _unit([1.0, 0.0, 0.0, 0.0])
-        maximum, _top3, _logical = evaluation.score_candidate(query, self.cluster)
+        maximum = evaluation.score_candidate(query, self.cluster)
         self.assertAlmostEqual(maximum, 1.0)
 
-    def test_duplicate_vectors_cannot_inflate_distinct_top_three(self):
-        query = _unit([1.0, 0.0, 0.0, 0.0])
-        _maximum, distinct, logical = evaluation.score_candidate(query, self.cluster)
-        self.assertLess(distinct, logical)
-
-    def test_max_and_top_three_use_identical_evaluation_rows(self):
+    def test_nn_max_is_the_only_scored_method(self):
         rows = [
-            _scored(_manifest("q1", "CPP", "validation", 0, "human", "h"), 0.1, 0.2),
-            _scored(_manifest("q1", "CPP", "validation", 1, "heldout_ai", "a"), 0.9, 0.8),
+            _scored(_manifest("q1", "CPP", "validation", 0, "human", "h"), 0.1),
+            _scored(_manifest("q1", "CPP", "validation", 1, "heldout_ai", "a"), 0.9),
         ]
         deduped = evaluation._deduplicate_metric_rows(rows)
         self.assertEqual(len(deduped), 2)
-        self.assertTrue(all(hasattr(item, "ai_nn_max") and hasattr(item, "ai_top3_mean") for item in deduped))
+        self.assertTrue(all(hasattr(item, "ai_nn_max") for item in deduped))
+        self.assertFalse(any(hasattr(item, "ai_top3_mean") for item in deduped))
 
     def test_thresholds_use_training_humans_only(self):
         rows = [
-            _scored(_manifest("q1", "CPP", "train", 0, "human", "h1"), 0.1, 0.2),
-            _scored(_manifest("q2", "CPP", "train", 0, "human", "h2"), 0.2, 0.3),
-            _scored(_manifest("q3", "PYTHON", "train", 0, "human", "h3"), 0.1, 0.2),
-            _scored(_manifest("q4", "PYTHON", "train", 0, "human", "h4"), 0.2, 0.3),
-            _scored(_manifest("q5", "CPP", "validation", 0, "human", "h5"), 0.99, 0.99),
+            _scored(_manifest("q1", "CPP", "train", 0, "human", "h1"), 0.1),
+            _scored(_manifest("q2", "CPP", "train", 0, "human", "h2"), 0.2),
+            _scored(_manifest("q3", "PYTHON", "train", 0, "human", "h3"), 0.1),
+            _scored(_manifest("q4", "PYTHON", "train", 0, "human", "h4"), 0.2),
+            _scored(_manifest("q5", "CPP", "validation", 0, "human", "h5"), 0.99),
         ]
         thresholds = evaluation.derive_training_thresholds(rows)
         cpp_max = next(item for item in thresholds if item.method == evaluation.METHOD_MAX and item.language == "CPP" and item.target_fpr == 0.01)
@@ -244,9 +233,9 @@ class AiReferenceScoreTests(unittest.TestCase):
 
     def test_exact_match_sensitivity_uses_same_rows(self):
         rows = [
-            _scored(_manifest("q1", "CPP", "validation", 0, "human", "h"), 0.1, 0.2, True),
-            _scored(_manifest("q1", "CPP", "validation", 1, "heldout_ai", "a"), 0.9, 0.8, True),
-            _scored(_manifest("q2", "CPP", "validation", 1, "heldout_ai", "b"), 0.7, 0.6, False),
+            _scored(_manifest("q1", "CPP", "validation", 0, "human", "h"), 0.1, True),
+            _scored(_manifest("q1", "CPP", "validation", 1, "heldout_ai", "a"), 0.9, True),
+            _scored(_manifest("q2", "CPP", "validation", 1, "heldout_ai", "b"), 0.7, False),
         ]
         scope = evaluation.MetricScope("validation", "CPP", None, None, True)
         scoped = evaluation._filter_scope(rows, scope)

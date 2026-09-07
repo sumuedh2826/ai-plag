@@ -36,8 +36,7 @@ BOOTSTRAP_ITERATIONS = 1000
 BOOTSTRAP_SEED = 500
 TARGET_FPRS = (0.01, 0.05)
 METHOD_MAX = "ai_nn_max"
-METHOD_TOP3 = "ai_top3_mean"
-METHODS = (METHOD_MAX, METHOD_TOP3)
+METHODS = (METHOD_MAX,)
 
 
 @dataclass(frozen=True)
@@ -60,7 +59,6 @@ class ManifestRow:
 class ReferenceCluster:
     key: ClusterKey
     vectors: np.ndarray
-    distinct_vectors: np.ndarray
     stripped_hashes: tuple[str, ...]
 
 
@@ -68,8 +66,6 @@ class ReferenceCluster:
 class ScoredRow:
     record: ManifestRow
     ai_nn_max: float
-    ai_top3_mean: float
-    logical_top3_mean: float
     exact_match_to_reference: bool
 
 
@@ -186,9 +182,7 @@ def load_reference_clusters() -> dict[ClusterKey, ReferenceCluster]:
         if hashes is None:
             raise RuntimeError(f"Missing mixed-v1 metadata for {token}")
         _validate_reference_cluster(key, vectors, hashes)
-        distinct_indexes = _first_distinct_indexes(hashes)
-        distinct = np.asarray(vectors[distinct_indexes], dtype=np.float32)
-        clusters[key] = ReferenceCluster(key, vectors, distinct, hashes)
+        clusters[key] = ReferenceCluster(key, vectors, hashes)
     return clusters
 
 
@@ -228,18 +222,13 @@ def resolve_reference_cluster(
 def score_candidate(
     query: Sequence[float],
     cluster: ReferenceCluster,
-) -> tuple[float, float, float]:
+) -> float:
     query_vector = np.asarray(query, dtype=np.float32)
     _validate_query_vector(query_vector)
-    logical = np.asarray(cluster.vectors @ query_vector, dtype=np.float64)
-    distinct = np.asarray(cluster.distinct_vectors @ query_vector, dtype=np.float64)
-    if not np.isfinite(logical).all() or not np.isfinite(distinct).all():
+    similarities = np.asarray(cluster.vectors @ query_vector, dtype=np.float64)
+    if not np.isfinite(similarities).all():
         raise RuntimeError("Reference similarities must be finite")
-    maximum = float(np.max(logical))
-    top_count = min(3, len(distinct))
-    top3 = float(np.mean(np.sort(distinct)[-top_count:]))
-    logical_top3 = float(np.mean(np.sort(logical)[-3:]))
-    return maximum, top3, logical_top3
+    return float(np.max(similarities))
 
 
 def score_rows(
@@ -250,13 +239,11 @@ def score_rows(
     for row in rows:
         vector = _load_cached_vector(row.embedding_cache_key)
         cluster = resolve_reference_cluster(row, clusters)
-        maximum, top3, logical_top3 = score_candidate(vector, cluster)
+        maximum = score_candidate(vector, cluster)
         scored.append(
             ScoredRow(
                 record=row,
                 ai_nn_max=maximum,
-                ai_top3_mean=top3,
-                logical_top3_mean=logical_top3,
                 exact_match_to_reference=row.stripped_hash in cluster.stripped_hashes,
             )
         )
@@ -416,55 +403,13 @@ def recommend_method(
     metrics: Mapping[str, object],
     bootstrap: Mapping[str, Mapping[str, float | int | None]],
 ) -> str:
-    validation = metrics[DatasetSplit.VALIDATION.value]
-    if not isinstance(validation, dict):
-        return METHOD_MAX
-    exact = validation["exact_match_excluded_CPP"]
-    cpp = validation["CPP"]
-    personas = validation["personas"]
-    generators = validation["generators"]
-    if not all(isinstance(item, dict) for item in (exact, cpp, personas, generators)):
-        return METHOD_MAX
-    exact_gain = _recall_gain(exact, "1%")
-    cpp_gain = _recall_gain(cpp, "1%")
-    production_gain = _recall_gain(personas.get("production_review", {}), "1%")
-    generator_gains = [
-        _recall_gain(generators.get(name, {}), "1%")
-        for name in ("google/gemini-3.7-flash", "deepseek/deepseek-v4-pro")
-    ]
-    ci_low = bootstrap["exact-match-excluded CPP Recall@1%"]["low"]
-    top3_fpr = _metric_value(exact, METHOD_TOP3, "1%", "achieved_fpr")
-    if not isinstance(ci_low, float) or ci_low <= 0:
-        return METHOD_MAX
-    if exact_gain <= 0.01 or cpp_gain < 0 or production_gain < -0.02:
-        return METHOD_MAX
-    if any(gain < -0.03 for gain in generator_gains):
-        return METHOD_MAX
-    if top3_fpr is None or top3_fpr > 0.011:
-        return METHOD_MAX
-    return METHOD_TOP3
+    return METHOD_MAX
 
 
 def build_payload(
     result: EvaluationResult,
     runtime_seconds: float,
 ) -> dict[str, object]:
-    changed = sum(
-        not np.isclose(item.ai_top3_mean, item.logical_top3_mean)
-        for item in result.metric_rows
-    )
-    largest_change = max(
-        (
-            abs(item.ai_top3_mean - item.logical_top3_mean)
-            for item in result.metric_rows
-        ),
-        default=0.0,
-    )
-    sparse = [
-        key.token
-        for key, cluster in result.clusters.items()
-        if len(cluster.distinct_vectors) < 3
-    ]
     return {
         "experiment": "ai_reference_scores_v2",
         "rows": {
@@ -479,14 +424,6 @@ def build_payload(
             "logical_vectors": sum(
                 len(item.vectors) for item in result.clusters.values()
             ),
-            "distinct_pair_hash_vectors": sum(
-                len(item.distinct_vectors)
-                for item in result.clusters.values()
-            ),
-            "clusters_with_fewer_than_three_distinct": sparse,
-            "rows_where_logical_top3_differs_from_distinct_top3": changed,
-            "maximum_logical_vs_distinct_top3_change": largest_change,
-            "max_nn_changes_from_deduplication": 0,
         },
         "thresholds_from_training_humans_only": [
             asdict(item) for item in result.thresholds
@@ -496,7 +433,7 @@ def build_payload(
             "iterations": BOOTSTRAP_ITERATIONS,
             "seed": BOOTSTRAP_SEED,
             "population": "validation question-clustered",
-            "top3_mean_minus_max_nn": result.bootstrap,
+            "ai_nn_max": result.bootstrap,
         },
         "recommendation": result.recommendation,
         "runtime_seconds": runtime_seconds,
@@ -546,17 +483,6 @@ def _validate_reference_cluster(
     norms = np.linalg.norm(vectors, axis=1)
     if not np.allclose(norms, 1.0, atol=1e-3):
         raise RuntimeError(f"Reference vectors are not normalized for {key.token}")
-
-
-def _first_distinct_indexes(hashes: Sequence[str]) -> list[int]:
-    seen: set[str] = set()
-    indexes: list[int] = []
-    for index, stripped_hash in enumerate(hashes):
-        if stripped_hash in seen:
-            continue
-        seen.add(stripped_hash)
-        indexes.append(index)
-    return indexes
 
 
 def _load_manifest(path: Path) -> list[ManifestRow]:
@@ -721,8 +647,6 @@ def _labeled_scores(rows: Sequence[ScoredRow], method: str) -> list[object]:
 def _method_score(row: ScoredRow, method: str) -> float:
     if method == METHOD_MAX:
         return row.ai_nn_max
-    if method == METHOD_TOP3:
-        return row.ai_top3_mean
     raise ValueError(f"Unknown method: {method}")
 
 
@@ -776,24 +700,13 @@ def _bootstrap_delta(
     )
     scoped = _filter_scope(rows, scope)
     if target.target_fpr is None:
-        top3 = _bootstrap_auroc(scoped, METHOD_TOP3)
-        maximum = _bootstrap_auroc(scoped, METHOD_MAX)
-    else:
-        top3 = _bootstrap_recall(
-            scoped,
-            thresholds,
-            METHOD_TOP3,
-            target.target_fpr,
-        )
-        maximum = _bootstrap_recall(
-            scoped,
-            thresholds,
-            METHOD_MAX,
-            target.target_fpr,
-        )
-    if top3 is None or maximum is None:
-        return None
-    return top3 - maximum
+        return _bootstrap_auroc(scoped, METHOD_MAX)
+    return _bootstrap_recall(
+        scoped,
+        thresholds,
+        METHOD_MAX,
+        target.target_fpr,
+    )
 
 
 def _bootstrap_recall(
@@ -837,16 +750,6 @@ def _confidence_interval(values: Sequence[float]) -> dict[str, float | int | Non
         "low": float(np.percentile(array, 2.5)),
         "high": float(np.percentile(array, 97.5)),
     }
-
-
-def _recall_gain(metrics: object, point: str) -> float:
-    if not isinstance(metrics, dict):
-        return float("-inf")
-    top3 = _metric_value(metrics, METHOD_TOP3, point, "recall")
-    maximum = _metric_value(metrics, METHOD_MAX, point, "recall")
-    if top3 is None or maximum is None:
-        return float("-inf")
-    return top3 - maximum
 
 
 def _metric_value(
@@ -942,9 +845,9 @@ def _report_markdown(payload: Mapping[str, object]) -> str:
             "",
             f"Recommendation: `{payload['recommendation']}`.",
             "",
-            "Compared maximum mixed-v1 similarity with the mean of the top three "
-            "distinct mixed-v1 reference hashes. Thresholds were derived only from "
-            "training-split humans. GPT-heavy rows were training augmentation only.",
+            "Compared nearest-neighbour maximum mixed-v1 similarity. "
+            "Thresholds were derived only from training-split humans. "
+            "GPT-heavy rows were training augmentation only.",
             "",
             f"Reference audit: {payload['reference_audit']}",
             "",

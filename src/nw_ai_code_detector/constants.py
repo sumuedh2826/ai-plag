@@ -132,7 +132,6 @@ DEFAULT_EMBED_CONCURRENCY = 8
 VOYAGE_CODE_3_USD_PER_MILLION_TOKENS = 0.18
 HELD_OUT_PER_LANGUAGE = 2
 HUMAN_NEGATIVES_PER_LANGUAGE = 2
-CANONICALITY_TOP_K = 3
 FPR_OPERATING_POINTS = (0.01, 0.05)
 CANONICALITY_SPLIT_VERSION = "canonicality_dataset_split_v1"
 MODEL_DATASET_VERSION = "model_dataset_v2"
@@ -171,10 +170,6 @@ COMMENTED_OUT_CODE_DISCOUNT = 0.12
 HIGH_AI_SCORE_FLOOR = 0.98
 HIGH_CONFIDENCE_LABEL = "high_confidence"
 DESCRIPTIVE_RAISE_FLOOR = 0.42
-# Convention fraction is measured, never applied to the score or flag
-# decision. Same confidence-only rule as descriptive naming.
-NAMING_CONVENTION_RAISE_FLOOR = 0.42
-NAMING_CONVENTION_RAISE_AMOUNT = 0.05
 # PROVISIONAL display mapping only. Flagging still uses the raw locked score.
 # Midpoint is T_zero_fp (labeled-human median maps to ~25%, threshold to 50%,
 # cosine 1.0 to 100%). Python anchors rest on 5 scoreable humans.
@@ -422,11 +417,6 @@ class DatasetSplit(str, Enum):
     TRAIN = "train"
     VALIDATION = "validation"
     INTERNAL_TEST = "internal_test"
-
-
-class EvaluationMode(str, Enum):
-    ALL_HUMANS = "all_humans"
-    CACHED_HUMANS_ONLY = "cached_humans_only"
 
 
 class EvalPersona(str, Enum):
