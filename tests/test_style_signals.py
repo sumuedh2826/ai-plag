@@ -171,6 +171,19 @@ class StyleSignalTests(unittest.TestCase):
         for body in prose_bodies:
             self.assertFalse(_is_commented_out_code(body, Language.CPP), body)
 
+    def test_python_partial_assignment_and_flight_explanations_are_prose(self):
+        self.assertTrue(
+            _is_commented_out_code("dist[i] = cost + price", Language.PYTHON)
+        )
+        prose_bodies = (
+            "dist[i] = cheapest cost to reach city i from src using at most the allowed edges.",
+            "At most k stops means at most k+1 edges.",
+            "Snapshot of current distances so we don't use more than one edge per round.",
+            "Run the relaxation k+1 times.",
+        )
+        for body in prose_bodies:
+            self.assertFalse(_is_commented_out_code(body, Language.PYTHON), body)
+
     def test_unused_local_ignores_params_and_loop_vars(self):
         self.assertTrue(_fired(_python_flags(PYTHON_UNUSED), StyleSignalName.UNUSED_LOCALS))
         self.assertTrue(_fired(_cpp_flags(CPP_UNUSED), StyleSignalName.UNUSED_LOCALS))
@@ -221,6 +234,24 @@ public:
         raised = naming_fractions(verbose, "CPP")
         self.assertEqual(raised.unique_identifier_count, 2)
         self.assertEqual(raised.frac_descriptive, 1.0)
+
+    def test_convention_frac_is_camel_for_cpp_and_snake_for_python(self):
+        camel = naming_fractions(
+            """class solution {
+public:
+    int solve(int values) {
+        int maxNode = 0;
+        int nextNode = values;
+        int prev = maxNode + nextNode;
+        return prev;
+    }
+};
+""",
+            "CPP",
+        )
+        snake = naming_fractions(PYTHON_UNIFORM, "PYTHON")
+        self.assertGreater(camel.convention_frac, 0.42)
+        self.assertGreater(snake.convention_frac, 0.42)
 
 
 class RankAndFlagQueryTests(unittest.TestCase):

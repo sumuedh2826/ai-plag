@@ -66,21 +66,23 @@ class NamingFractions:
     frac_short: float
     frac_descriptive: float
     unique_identifier_count: int
+    convention_frac: float
 
 
 def naming_fractions(stripped_code: str, language: str) -> NamingFractions:
     source_language = Language(language)
     if not stripped_code.strip():
-        return NamingFractions(0.0, 0.0, 0.0, 0)
+        return NamingFractions(0.0, 0.0, 0.0, 0, 0.0)
     tree = _parse_tree(stripped_code, source_language)
     names = local_binding_names(tree.root_node, stripped_code.encode("utf-8"), source_language)
     total = len(names)
     if total == 0:
-        return NamingFractions(0.0, 0.0, 0.0, 0)
+        return NamingFractions(0.0, 0.0, 0.0, 0, 0.0)
     single = sum(1 for name in names if len(name) == 1) / total
     short = sum(1 for name in names if len(name) <= NAMING_SHORT_NAME_MAX_LENGTH) / total
     descriptive = sum(1 for name in names if _is_descriptive_name(name)) / total
-    return NamingFractions(single, short, descriptive, total)
+    convention = _convention_fraction(names, source_language)
+    return NamingFractions(single, short, descriptive, total, convention)
 
 
 def extract_style_flags(
@@ -246,6 +248,13 @@ def _parses_as_code(body: str, language: Language) -> bool:
     wrapped = _wrap_snippet(body, language)
     tree = _parse_tree(wrapped, language)
     body_nodes = _probe_body_nodes(tree.root_node, language)
+    if not body_nodes or any(node.has_error for node in body_nodes):
+        return False
+    if tree.root_node.has_error and not _is_cpp_expression_without_semicolon(
+        body_nodes,
+        language,
+    ):
+        return False
     return any(_contains_code_statement(node) for node in body_nodes)
 
 
@@ -298,6 +307,20 @@ def _initializer_list_children(declaration: Node) -> tuple[Node, ...]:
             if part.type == "initializer_list":
                 return tuple(part.named_children)
     return ()
+
+
+def _is_cpp_expression_without_semicolon(
+    body_nodes: tuple[Node, ...],
+    language: Language,
+) -> bool:
+    if language is not Language.CPP:
+        return False
+    expression_types = {
+        "assignment_expression",
+        "call_expression",
+        "update_expression",
+    }
+    return bool(body_nodes) and all(node.type in expression_types for node in body_nodes)
 
 
 def _contains_code_statement(node: Node) -> bool:
@@ -557,6 +580,28 @@ def _should_skip_identifier(node: Node, source: str) -> bool:
     if parent.type in {"function_definition", "class_definition"}:
         return bool(parent.named_children) and parent.named_children[0] == node
     return parent.type == "attribute"
+
+
+def _convention_fraction(names: set[str], language: Language) -> float:
+    if not names:
+        return 0.0
+    if language is Language.CPP:
+        matched = sum(1 for name in names if _is_camel_case_name(name))
+    else:
+        matched = sum(1 for name in names if _is_snake_case_name(name))
+    return matched / len(names)
+
+
+def _is_snake_case_name(name: str) -> bool:
+    return "_" in name
+
+
+def _is_camel_case_name(name: str) -> bool:
+    if len(name) < 2:
+        return False
+    has_lower = any(character.islower() for character in name)
+    has_inner_upper = any(character.isupper() for character in name[1:])
+    return has_lower and has_inner_upper
 
 
 def _is_descriptive_name(name: str) -> bool:

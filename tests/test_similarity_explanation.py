@@ -10,6 +10,7 @@ from nw_ai_code_detector.discount_layer import (
     CanonicalityAssessment,
     CommentedOutDiscount,
     ConfidenceRouting,
+    ConventionRaise,
     DescriptiveRaise,
 )
 from nw_ai_code_detector.similarity_explanation import (
@@ -53,6 +54,7 @@ class SimilarityExplanationTests(unittest.TestCase):
             0.08,
             CommentedOutDiscount(False, 0.0),
             DescriptiveRaise(False, False, 0.0, 0.1),
+            ConventionRaise(0.0, False, 0.0),
             1.0,
             0.96,
             None,
@@ -72,6 +74,7 @@ def _assessment():
         0.08,
         CommentedOutDiscount(False, 0.0),
         DescriptiveRaise(False, False, 0.0, 0.1),
+        ConventionRaise(0.0, False, 0.0),
         1.0,
         0.96,
         None,

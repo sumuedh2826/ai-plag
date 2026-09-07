@@ -164,12 +164,17 @@ SHORT_LOW_CONFIDENCE_MAX_TOKENS_BY_LANGUAGE = {
 # Same 0.030 cutoff as the previous no-discount point; do not raise it.
 CLUSTER_LOW_DIVERSITY_DISTANCE = 0.030
 COMMENTED_OUT_CODE_DISCOUNT = 0.12
-# Naming never changes the score. If score is already in the high-similarity
-# band and frac_descriptive is high, attach a WEAK high_confidence label only.
-# It cannot push a below-band submission across the flag floor.
+# Descriptive names never change the score. If score is already in the
+# high-similarity band and frac_descriptive is high, attach a WEAK
+# high_confidence label only. It cannot push a below-band submission
+# across the flag floor.
 HIGH_AI_SCORE_FLOOR = 0.98
 HIGH_CONFIDENCE_LABEL = "high_confidence"
 DESCRIPTIVE_RAISE_FLOOR = 0.42
+# Convention fraction is measured, never applied to the score or flag
+# decision. Same confidence-only rule as descriptive naming.
+NAMING_CONVENTION_RAISE_FLOOR = 0.42
+NAMING_CONVENTION_RAISE_AMOUNT = 0.05
 # PROVISIONAL display mapping only. Flagging still uses the raw locked score.
 # Midpoint is T_zero_fp (labeled-human median maps to ~25%, threshold to 50%,
 # cosine 1.0 to 100%). Python anchors rest on 5 scoreable humans.

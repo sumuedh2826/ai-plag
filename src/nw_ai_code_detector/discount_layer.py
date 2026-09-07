@@ -34,6 +34,7 @@ class CanonicalityDiscountRequest:
     cluster_diversity: float
     commented_out_code_present: bool
     frac_descriptive: float
+    convention_frac: float
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,13 @@ class DescriptiveRaise:
 
 
 @dataclass(frozen=True)
+class ConventionRaise:
+    frac: float
+    applied: bool
+    amount: float
+
+
+@dataclass(frozen=True)
 class CanonicalityAssessment:
     routing: ConfidenceRouting
     raw_canonicality: float
@@ -67,6 +75,7 @@ class CanonicalityAssessment:
     cluster_diversity: float
     commented_out_code: CommentedOutDiscount
     descriptive_raise: DescriptiveRaise
+    convention_raise: ConventionRaise
     remaining_factor: float
     score: float | None
     confidence: str | None
@@ -87,10 +96,11 @@ def cluster_is_low_diversity(diversity: float) -> bool:
 
 
 def assess_canonicality(request: CanonicalityDiscountRequest) -> CanonicalityAssessment:
-    """Route unscoreable cases out; apply commented-out discount only."""
+    """Route unscoreable cases out; discount commented-out code; naming is confidence-only."""
     routing = _confidence_routing(request.token_count, request.language, request.cluster_diversity)
     commented_out = _commented_out_discount(request.commented_out_code_present)
     descriptive = _descriptive_reading(request.frac_descriptive)
+    convention = _convention_raise(request.convention_frac)
     if routing.status not in HAS_CANONICALITY_SCORE_STATUSES:
         return CanonicalityAssessment(
             routing,
@@ -100,14 +110,16 @@ def assess_canonicality(request: CanonicalityDiscountRequest) -> CanonicalityAss
             request.cluster_diversity,
             commented_out,
             descriptive,
+            convention,
             1.0,
             None,
             None,
         )
     remaining = 1.0 - commented_out.discount
-    score = request.raw_canonicality * remaining
-    if score > request.raw_canonicality:
+    discounted = request.raw_canonicality * remaining
+    if discounted > request.raw_canonicality:
         raise RuntimeError("Discount layer raised canonicality")
+    score = discounted
     confidence = _naming_confidence_label(score, request.frac_descriptive)
     return CanonicalityAssessment(
         routing,
@@ -117,6 +129,7 @@ def assess_canonicality(request: CanonicalityDiscountRequest) -> CanonicalityAss
         request.cluster_diversity,
         commented_out,
         descriptive,
+        convention,
         remaining,
         score,
         confidence,
@@ -172,6 +185,10 @@ def _commented_out_discount(present: bool) -> CommentedOutDiscount:
 def _descriptive_reading(frac_descriptive: float) -> DescriptiveRaise:
     high = frac_descriptive >= DESCRIPTIVE_RAISE_FLOOR
     return DescriptiveRaise(high, False, 0.0, frac_descriptive)
+
+
+def _convention_raise(convention_frac: float) -> ConventionRaise:
+    return ConventionRaise(convention_frac, False, 0.0)
 
 
 def _naming_confidence_label(score: float, frac_descriptive: float) -> str | None:

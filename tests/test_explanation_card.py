@@ -18,6 +18,7 @@ from nw_ai_code_detector.discount_layer import (
     CanonicalityAssessment,
     CommentedOutDiscount,
     ConfidenceRouting,
+    ConventionRaise,
     DescriptiveRaise,
 )
 from nw_ai_code_detector.explanation_card import (
@@ -74,6 +75,7 @@ def _request(score, status, reason, commented, diversity):
         diversity,
         CommentedOutDiscount(commented, 0.12 if commented else 0.0),
         DescriptiveRaise(False, False, 0.0, 0.1),
+        ConventionRaise(0.0, False, 0.0),
         1.0,
         score if status != INSUFFICIENT_EVIDENCE_STATUS else None,
         None,

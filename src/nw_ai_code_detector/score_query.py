@@ -150,6 +150,7 @@ def _scored_result(
         flag.fired and flag.name == StyleSignalName.COMMENTED_OUT_CODE.value
         for flag in flags
     )
+    naming = naming_fractions(reading.stripped, request.language)
     assessment = assess_canonicality(
         CanonicalityDiscountRequest(
             reading.canonicality,
@@ -158,7 +159,8 @@ def _scored_result(
             request.language,
             reading.cluster_diversity,
             commented,
-            naming_fractions(reading.stripped, request.language).frac_descriptive,
+            naming.frac_descriptive,
+            naming.convention_frac,
         )
     )
     match = find_nearest_generated_reference_from_cluster(

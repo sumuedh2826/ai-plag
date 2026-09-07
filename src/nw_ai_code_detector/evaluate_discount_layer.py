@@ -182,6 +182,7 @@ def _score_row(
             cluster_diversity,
             commented,
             naming.frac_descriptive,
+            naming.convention_frac,
         )
     )
     return DiscountEvalRow(
@@ -244,8 +245,8 @@ def _build_report(
             ),
             "low_cluster_diversity": "route low_confidence; not a score multiplier",
             "scoreable_score": (
-                "raw_canonicality * (1 - commented_out); naming is a high_confidence "
-                "label only when score is already at the high-similarity band"
+                "raw_canonicality * (1 - commented_out); naming stays "
+                "confidence-only and never changes the score"
             ),
             "token_floors": dict(SIGNIFICANT_TOKEN_THRESHOLDS_BY_LANGUAGE),
             "cluster_low_diversity_distance": CLUSTER_LOW_DIVERSITY_DISTANCE,

@@ -69,6 +69,14 @@ CANDIDATE_HUMAN_TOKEN_RAW_SAMPLES_PATH = (
 HELDOUT_AI_RAW_SAMPLES_PATH = REPO_ROOT / "heldout_ai_similarity_samples_raw.txt"
 ENV_PATH = REPO_ROOT / ".env"
 
+# --- refs_v2 bank (parallel to the v1 bank; v1 paths above are never written by v2) ---
+AI_SOLUTIONS_V2_DIR = DATA_DIR / "ai_solutions_v2"
+PROGRESS_LOG_V2_PATH = AI_SOLUTIONS_V2_DIR / "_progress.jsonl"
+REFERENCE_INDEX_V2_DIR = OUTPUTS_DIR / "reference_index_v2"
+REFERENCE_INDEX_V2_MANIFEST_PATH = OUTPUTS_DIR / "reference_index_v2_manifest.json"
+REFS_V2_REPORT_PATH = OUTPUTS_DIR / "refs_v2_generation_report.json"
+REFS_V2_EVAL_DIR = OUTPUTS_DIR / "reference_index_v2_eval"
+
 
 @dataclass(frozen=True)
 class OpenRouterSettings:
@@ -79,6 +87,7 @@ class OpenRouterSettings:
     openai_model: str
     concurrency: int
     timeout_seconds: int
+    anthropic_model: str = ""
 
 
 def load_openrouter_settings() -> OpenRouterSettings:
@@ -97,6 +106,7 @@ def load_openrouter_settings() -> OpenRouterSettings:
         openai_model=_required_env("MODEL_OPENAI"),
         concurrency=concurrency,
         timeout_seconds=timeout_seconds,
+        anthropic_model=os.getenv("MODEL_ANTHROPIC", "").strip().strip('"'),
     )
 
 
@@ -132,6 +142,13 @@ def model_slugs(settings: OpenRouterSettings) -> tuple[str, ...]:
             settings.openai_model,
         ]
     return tuple(models)
+
+
+def model_slugs_v2(settings: OpenRouterSettings) -> tuple[str, ...]:
+    """v2 swaps DeepSeek for Anthropic; Gemini and OpenAI are held constant as controls."""
+    if not settings.anthropic_model:
+        raise ValueError("Missing required environment variable MODEL_ANTHROPIC")
+    return (settings.gemini_model, settings.anthropic_model, settings.openai_model)
 
 
 def _required_env(name: str) -> str:

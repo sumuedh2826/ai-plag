@@ -227,8 +227,8 @@ def _result_header(score: DemoScore) -> None:
         st.caption(f"Detector reason: {result.reason}.")
     st.caption(_token_band_caption(result, score.language))
     st.caption(
-        "≥50% = flagged (provisional). Near 50% means borderline/review, "
-        "not a hard human/AI split."
+        "≥50% = flagged (provisional). The 40–60% band is explicitly "
+        "borderline/review, not a crisp human/AI split."
     )
     cache_text = "in-memory cache hit" if score.cache_hit else "live Voyage embedding"
     st.caption(f"Embedding: {cache_text}. Nothing from this submission was written to disk.")
@@ -246,9 +246,9 @@ def _render_explanation(card: ExplanationCard) -> None:
 def _band(percent: int | None) -> str:
     if percent is None:
         return "unscored"
-    if 45 <= percent <= 55:
+    if 40 <= percent <= 60:
         return "borderline"
-    if percent > 55:
+    if percent > 60:
         return "high"
     return "low"
 

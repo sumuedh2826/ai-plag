@@ -96,7 +96,7 @@ public:
         embedder._client.embed.assert_called_once()
 
     def test_confidence_mirrors_all_three_detector_routes(self):
-        from demo.app import _confidence_label, _token_band_caption
+        from demo.app import _band, _confidence_label, _token_band_caption
 
         tight = _detection(LOW_CONFIDENCE_STATUS, None)
         too_short = _detection(INSUFFICIENT_EVIDENCE_STATUS, None)
@@ -115,6 +115,10 @@ public:
         self.assertIn("110", _token_band_caption(short_band, "CPP"))
         self.assertIn("55", _token_band_caption(short_band, "PYTHON"))
         self.assertIn("100", _token_band_caption(short_band, "PYTHON"))
+        self.assertEqual(_band(40), "borderline")
+        self.assertEqual(_band(60), "borderline")
+        self.assertEqual(_band(39), "low")
+        self.assertEqual(_band(61), "high")
 
     def test_demo_scoring_rejects_disk_backed_embedder(self):
         settings = VoyageSettings("secret", "voyage-code-3", 1, 1, 25)

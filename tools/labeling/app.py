@@ -25,6 +25,7 @@ from tools.labeling.labels_store import (
     save_label,
     save_relabel,
 )
+from tools.labeling.review_data import QueueItem, ReviewPage, load_queue, load_review_page
 from nw_ai_code_detector.display_match import display_match_percent
 
 SHORTCUT_SCRIPT = """
@@ -194,7 +195,7 @@ def _render_actions(
     existing = labels.get(page.item.record_id, {})
     hide_previous = _hide_previous_label(blind_relabel)
     default_notes = "" if hide_previous else str(existing.get("notes") or "")
-    notes = st.text_area("Notes (optional)", value=default_notes, key=page.item.record_id)
+    st.text_area("Notes (optional)", value=default_notes, key=page.item.record_id)
     if existing and not hide_previous:
         st.caption(f"Current label: {existing.get('my_label')}")
     previous, human, ai, unsure = st.columns(4)
