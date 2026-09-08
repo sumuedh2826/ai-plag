@@ -10,6 +10,7 @@ from nw_ai_code_detector.config import VoyageSettings
 from nw_ai_code_detector.constants import (
     HIGH_CONFIDENCE_LABEL,
     INSUFFICIENT_EVIDENCE_STATUS,
+    MISSING_OR_INVALID_STATUS,
     LOW_CONFIDENCE_SHORT_STATUS,
     LOW_CONFIDENCE_STATUS,
     SCORED_STATUS,
@@ -95,30 +96,84 @@ public:
         writer.assert_not_called()
         embedder._client.embed.assert_called_once()
 
-    def test_confidence_mirrors_all_three_detector_routes(self):
-        from demo.app import _band, _confidence_label, _token_band_caption
+    def test_status_and_confidence_do_not_overlap(self):
+        from demo.app import _band
+        from demo.wording import plain_confidence, plain_status
 
-        tight = _detection(LOW_CONFIDENCE_STATUS, None)
-        too_short = _detection(INSUFFICIENT_EVIDENCE_STATUS, None)
-        short_band = _detection(LOW_CONFIDENCE_SHORT_STATUS, None)
-        short_band_named = _detection(LOW_CONFIDENCE_SHORT_STATUS, HIGH_CONFIDENCE_LABEL)
-        scored_named = _detection(SCORED_STATUS, HIGH_CONFIDENCE_LABEL)
-        scored_plain = _detection(SCORED_STATUS, None)
-        self.assertIn("tight cluster", _confidence_label(tight))
-        self.assertIn("below token floor", _confidence_label(too_short))
-        self.assertIn("short code", _confidence_label(short_band))
-        self.assertIn("short code", _confidence_label(short_band_named))
-        self.assertIn(HIGH_CONFIDENCE_LABEL, _confidence_label(short_band_named))
-        self.assertEqual(_confidence_label(scored_named), HIGH_CONFIDENCE_LABEL)
-        self.assertEqual(_confidence_label(scored_plain), "standard")
-        self.assertIn("70", _token_band_caption(short_band, "CPP"))
-        self.assertIn("110", _token_band_caption(short_band, "CPP"))
-        self.assertIn("55", _token_band_caption(short_band, "PYTHON"))
-        self.assertIn("100", _token_band_caption(short_band, "PYTHON"))
+        # STATUS carries *why it was not scored*; nothing else.
+        self.assertEqual(plain_status(SCORED_STATUS), ("Scored", None))
+        self.assertEqual(plain_status(LOW_CONFIDENCE_SHORT_STATUS), ("Scored", None))
+        tight_head, tight_reason = plain_status(LOW_CONFIDENCE_STATUS)
+        self.assertEqual(tight_head, "Not scored")
+        self.assertIn("one common solution", tight_reason)
+        short_head, short_reason = plain_status(INSUFFICIENT_EVIDENCE_STATUS)
+        self.assertEqual(short_head, "Not scored")
+        self.assertIn("too short", short_reason)
+
+        # CONFIDENCE is a caveat on an existing score: shown only when low, and never
+        # for a result that was not scored at all.
+        self.assertIsNone(plain_confidence(SCORED_STATUS))
+        self.assertIsNone(plain_confidence(LOW_CONFIDENCE_STATUS))
+        self.assertIsNone(plain_confidence(INSUFFICIENT_EVIDENCE_STATUS))
+        self.assertIsNone(plain_confidence(MISSING_OR_INVALID_STATUS))
+        short_confidence = plain_confidence(LOW_CONFIDENCE_SHORT_STATUS)
+        self.assertIsNotNone(short_confidence)
+        self.assertIn("short code", short_confidence)
+
+        # "High confidence" must never be rendered anywhere.
+        for status in (SCORED_STATUS, LOW_CONFIDENCE_SHORT_STATUS, LOW_CONFIDENCE_STATUS,
+                       INSUFFICIENT_EVIDENCE_STATUS, MISSING_OR_INVALID_STATUS):
+            shown = f"{plain_status(status)[1] or ''} {plain_confidence(status) or ''}"
+            self.assertNotIn("High confidence", shown)
+            # No reason may appear in both fields.
+            if plain_status(status)[1] and plain_confidence(status):
+                self.fail(f"{status} populates both status reason and confidence")
+
+        # The detector's naming label is additive and must never reach the wording.
+        for status in (LOW_CONFIDENCE_STATUS, LOW_CONFIDENCE_SHORT_STATUS):
+            self.assertNotIn(HIGH_CONFIDENCE_LABEL, plain_confidence(status) or "")
+            self.assertNotIn(HIGH_CONFIDENCE_LABEL, plain_status(status)[1] or "")
+
+        # Raw internal routing strings must never reach user-facing text.
+        for status in (LOW_CONFIDENCE_STATUS, LOW_CONFIDENCE_SHORT_STATUS,
+                       INSUFFICIENT_EVIDENCE_STATUS, SCORED_STATUS):
+            shown = f"{plain_status(status)[1] or ''} {plain_confidence(status) or ''}"
+            for internal in (LOW_CONFIDENCE_SHORT_STATUS, INSUFFICIENT_EVIDENCE_STATUS,
+                             "short_code_low_confidence", "low_cluster_diversity"):
+                self.assertNotIn(internal, shown)
+
         self.assertEqual(_band(40), "borderline")
         self.assertEqual(_band(60), "borderline")
         self.assertEqual(_band(39), "low")
         self.assertEqual(_band(61), "high")
+
+    def test_polish_falls_back_when_the_model_is_unavailable(self):
+        from unittest.mock import patch
+
+        from demo.wording import explanation_facts, hardcoded_sentences, polish_facts
+
+        facts = explanation_facts(
+            status=SCORED_STATUS, match_level="high",
+            cluster_diversity=0.09, commented_out_code=False,
+        )
+        with patch.dict("os.environ", {"OPENROUTER_API_KEY": ""}, clear=False):
+            with patch("dotenv.load_dotenv", lambda *a, **k: None):
+                self.assertIsNone(polish_facts(facts))
+        self.assertTrue(hardcoded_sentences(facts))
+
+    def test_wording_never_claims_authorship_or_copying(self):
+        from demo.wording import explanation_facts, hardcoded_sentences
+
+        for level in ("high", "medium", "low"):
+            for tight in (0.01, 0.09):
+                facts = explanation_facts(
+                    status=SCORED_STATUS, match_level=level,
+                    cluster_diversity=tight, commented_out_code=False,
+                )
+                text = " ".join(s for _h, s in hardcoded_sentences(facts)).lower()
+                for banned in ("copied", "cheat", "ai-written", "probability", "%"):
+                    self.assertNotIn(banned, text)
+                self.assertIn("similar", text)
 
     def test_demo_scoring_rejects_disk_backed_embedder(self):
         settings = VoyageSettings("secret", "voyage-code-3", 1, 1, 25)

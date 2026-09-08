@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 from pathlib import Path
 import sys
@@ -28,28 +29,28 @@ from demo.runtime import (
 from nw_ai_code_detector.config import load_voyage_settings
 from nw_ai_code_detector.constants import (
     DISPLAY_MATCH_PERCENT_MIDPOINT,
-    INSUFFICIENT_EVIDENCE_STATUS,
-    LOW_CONFIDENCE_SHORT_STATUS,
-    LOW_CONFIDENCE_STATUS,
-    MISSING_OR_INVALID_STATUS,
-    SHORT_LOW_CONFIDENCE_MAX_TOKENS_BY_LANGUAGE,
-    SIGNIFICANT_TOKEN_THRESHOLDS_BY_LANGUAGE,
+    StyleSignalName,
+)
+from demo.wording import (
+    REVIEWER_QUESTION,
+    explanation_facts,
+    hardcoded_sentences,
+    plain_confidence,
+    plain_status,
+    polish_facts,
 )
 from nw_ai_code_detector.data_load import QuestionRecord
-from nw_ai_code_detector.explanation_card import ExplanationCard
+from nw_ai_code_detector.discount_layer import mean_pairwise_cosine_distance
+from nw_ai_code_detector.index import ClusterKey
 from nw_ai_code_detector.score_query import DetectionResult
 
+LOGGER = logging.getLogger(__name__)
 POC_BANNER = "POC / provisional — not validated"
-NO_HIGHLIGHT_NOTE = "Line-level highlighting not yet available."
-# Routing status is the authoritative confidence source; the detector's naming
-# label is only an additive qualifier and must never replace a low-confidence route.
-CONFIDENCE_LABEL_BY_STATUS = {
-    LOW_CONFIDENCE_STATUS: "low — one obvious solution (tight cluster)",
-    LOW_CONFIDENCE_SHORT_STATUS: "low — short code",
-    INSUFFICIENT_EVIDENCE_STATUS: "not scored — below token floor",
-    MISSING_OR_INVALID_STATUS: "not scored — missing or invalid",
-}
-STANDARD_CONFIDENCE_LABEL = "standard"
+# TODO(security): the shared-password gate is DISABLED for local convenience.
+# It MUST be re-enabled before any shared or public deploy - without it, anyone who
+# reaches the URL can spend our Voyage API key. The mechanism below is intact; set
+# DEMO_REQUIRE_PASSWORD=1 (and DEMO_SHARED_PASSWORD) to turn it back on.
+REQUIRE_PASSWORD_ENV = "DEMO_REQUIRE_PASSWORD"
 
 
 def main() -> None:
@@ -61,8 +62,16 @@ def main() -> None:
         "Measures resemblance to our generated AI reference solutions. "
         "It does not prove authorship or report a cheating percentage."
     )
-    if not _password_gate():
-        st.stop()
+    if _password_required():
+        if not _password_gate():
+            st.stop()
+    else:
+        st.warning(
+            "Password gate is OFF (local mode). Re-enable with "
+            f"{REQUIRE_PASSWORD_ENV}=1 before sharing this URL — it protects the "
+            "Voyage API key.",
+            icon="🔓",
+        )
     try:
         questions, index, embedder, hashes = _resources()
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
@@ -76,23 +85,26 @@ def main() -> None:
         horizontal=True,
     )
     boilerplate = question.boilerplates.get(language, "")
-    raw_code = _submission_editor(
-        boilerplate,
-        question.question_id,
-        language,
-    )
-    ready = bool(raw_code.strip()) and raw_code != boilerplate
-    if st.button("Score submission", type="primary", disabled=not ready):
-        try:
-            st.session_state.demo_score = score_demo_submission(
-                DemoScoreRequest(raw_code, question, language),
-                index,
-                embedder,
-                hashes,
-            )
-        except Exception as exc:
-            st.error(f"Could not score this submission: {exc}")
-            st.session_state.pop("demo_score", None)
+    # A form commits the editor's current text when the button is clicked, so a
+    # single click scores the pasted code (no Ctrl+Enter step).
+    with st.form("score_form", clear_on_submit=False):
+        raw_code = _submission_editor(boilerplate, question.question_id, language)
+        submitted = st.form_submit_button("Score submission", type="primary")
+    if submitted:
+        if not raw_code.strip() or raw_code == boilerplate:
+            st.warning("Paste a submission first — the editor still holds the boilerplate.")
+        else:
+            try:
+                st.session_state.demo_score = score_demo_submission(
+                    DemoScoreRequest(raw_code, question, language),
+                    index,
+                    embedder,
+                    hashes,
+                )
+                st.session_state.pop("polished", None)
+            except Exception as exc:
+                st.error(f"Could not score this submission: {exc}")
+                st.session_state.pop("demo_score", None)
     score = st.session_state.get("demo_score")
     if isinstance(score, DemoScore):
         _render_result(score)
@@ -108,6 +120,10 @@ def _resources():
     embedder = InMemoryVoyageEmbedder(settings)
     hashes = load_reference_hashes()
     return questions, index, embedder, hashes
+
+
+def _password_required() -> bool:
+    return os.getenv(REQUIRE_PASSWORD_ENV, "").strip() in {"1", "true", "True", "yes"}
 
 
 def _password_gate() -> bool:
@@ -178,28 +194,53 @@ def _submission_editor(
 def _render_result(score: DemoScore) -> None:
     st.divider()
     _result_header(score)
-    left, right = st.columns(2)
+    _side_by_side(score)
+    _render_explanation(score)
+
+
+def _side_by_side(score: DemoScore) -> None:
+    """Stripped submission beside the nearest reference, plus guidance on what to look at.
+
+    Deliberately no line-level highlighting: the detector scores whole-code similarity,
+    so marking "matching lines" would fabricate precision we don't have and would mostly
+    highlight boilerplate and brackets that everyone writes identically."""
     code_language = "python" if score.language == "PYTHON" else "cpp"
+    reference = score.nearest_reference
+    st.subheader("Submission vs nearest AI reference")
+    st.caption(
+        "Both shown as the detector sees them (boilerplate stripped). Compare the "
+        "approach as a whole — the detector measures overall similarity, not "
+        "line-by-line copying."
+    )
+    left, right = st.columns(2)
     with left:
-        st.subheader("Full submitted code")
-        st.code(score.completed_code, language=code_language)
-        with st.expander("Detector-stripped code"):
-            st.code(score.stripped_code, language=code_language)
+        st.markdown("**Submission** (detector-stripped)")
+        st.code(score.stripped_code, language=code_language)
+        with st.expander("Full submitted code, as pasted"):
+            st.code(score.completed_code, language=code_language)
     with right:
-        st.subheader("Nearest generated AI reference")
-        st.caption("Our generated AI bank — not a student submission.")
-        if score.nearest_reference is None:
-            st.warning("Nearest reference code is unavailable.")
+        st.markdown("**Nearest AI reference** (detector-stripped)")
+        if reference is None:
+            st.info("No nearest reference is available for this submission.")
         else:
-            reference_code = (
-                score.nearest_reference.raw_code
-                or score.nearest_reference.stripped_code
-                or ""
+            st.code(reference.stripped_code or "", language=code_language)
+            st.caption(
+                f"AI-generated reference, not a student submission — persona "
+                f"`{reference.persona}`, model `{reference.generator}`."
             )
-            st.code(reference_code, language=code_language)
-        st.info(NO_HIGHLIGHT_NOTE)
-    if score.result.explanation_card is not None:
-        _render_explanation(score.result.explanation_card)
+    _reviewer_guidance(score)
+
+
+def _reviewer_guidance(score: DemoScore) -> None:
+    facts = _facts_for(score)
+    with st.container(border=True):
+        st.markdown("**What to look at**")
+        if facts.get("similarity"):
+            st.write(facts["similarity"])
+        st.write(facts["question_canonicality"])
+        if facts.get("human_signals"):
+            st.write(facts["human_signals"])
+        st.info(REVIEWER_QUESTION, icon="🔎")
 
 
 def _result_header(score: DemoScore) -> None:
@@ -214,18 +255,27 @@ def _result_header(score: DemoScore) -> None:
             f'<strong>{percent}%</strong></div>',
             unsafe_allow_html=True,
         )
+    headline, reason = plain_status(result.status)
+    confidence = plain_confidence(result.status)
     flag = (
         "Flagged (provisional)"
         if percent is not None and percent >= DISPLAY_MATCH_PERCENT_MIDPOINT
         else "Not flagged"
     )
-    first, second, third = st.columns(3)
+    first, second = st.columns(2)
     first.metric("Provisional flag", flag)
-    second.metric("Scoring status", result.status)
-    third.metric("Confidence", _confidence_label(result))
-    if result.reason:
-        st.caption(f"Detector reason: {result.reason}.")
-    st.caption(_token_band_caption(result, score.language))
+    second.metric("Scoring status", headline)
+    if reason:
+        st.info(reason)
+    # Confidence appears only as a caveat. Showing "High confidence" on every normal
+    # result trains reviewers to ignore the field.
+    if confidence:
+        st.warning(f"{confidence}.", icon="⚠️")
+    # Internal routing strings stay in logs, not on screen.
+    LOGGER.info(
+        "score status=%s reason=%s confidence=%s tokens=%s",
+        result.status, result.reason, result.confidence, result.token_count,
+    )
     st.caption(
         "≥50% = flagged (provisional). The 40–60% band is explicitly "
         "borderline/review, not a crisp human/AI split."
@@ -234,13 +284,66 @@ def _result_header(score: DemoScore) -> None:
     st.caption(f"Embedding: {cache_text}. Nothing from this submission was written to disk.")
 
 
-def _render_explanation(card: ExplanationCard) -> None:
+def _facts_for(score: DemoScore) -> dict:
+    result = score.result
+    return explanation_facts(
+        status=result.status,
+        match_level=_match_level(result.display_match_percent),
+        cluster_diversity=_cluster_diversity(score),
+        commented_out_code=_signal_fired(result, StyleSignalName.COMMENTED_OUT_CODE),
+    )
+
+
+def _render_explanation(score: DemoScore) -> None:
+    card = score.result.explanation_card
+    if card is None:
+        return
+    facts = _facts_for(score)
     st.subheader("Explanation")
-    for section in card.sections:
+    cache_key = f"polished_{id(score)}"
+    if cache_key not in st.session_state:
+        with st.spinner("Writing the explanation…"):
+            st.session_state[cache_key] = polish_facts(facts)
+    polished = st.session_state[cache_key]
+    for heading, sentence in polished or hardcoded_sentences(facts):
         with st.container(border=True):
-            st.markdown(f"**{section.heading}**")
-            st.write(section.body)
+            st.markdown(f"**{heading}**")
+            st.write(sentence)
     st.caption(card.footer)
+    st.caption(
+        "Wording written by a small model from the facts above — it never sees the "
+        "code or the match percentage. The percentage and this disclaimer are not "
+        "model-generated."
+        if polished else
+        "Standard wording (the rephrasing model was unavailable)."
+    )
+
+
+def _cluster_diversity(score: DemoScore) -> float | None:
+    """Read-only lookup for wording; the scorer computes its own value independently."""
+    reference = score.nearest_reference
+    if reference is None:
+        return None
+    try:
+        _questions, index, _embedder, _hashes = _resources()
+        cluster = index.get_cluster(ClusterKey(reference.question_id, score.language))
+        return mean_pairwise_cosine_distance(cluster.vectors)
+    except Exception:
+        return None
+
+
+def _signal_fired(result: DetectionResult, name: StyleSignalName) -> bool:
+    return any(flag.name == name.value and flag.fired for flag in result.signals)
+
+
+def _match_level(percent: int | None) -> str | None:
+    if percent is None:
+        return None
+    if percent > 60:
+        return "high"
+    if percent >= 40:
+        return "medium"
+    return "low"
 
 
 def _band(percent: int | None) -> str:
@@ -251,26 +354,6 @@ def _band(percent: int | None) -> str:
     if percent > 60:
         return "high"
     return "low"
-
-
-def _confidence_label(result: DetectionResult) -> str:
-    routed = CONFIDENCE_LABEL_BY_STATUS.get(result.status)
-    if routed is None:
-        return result.confidence or STANDARD_CONFIDENCE_LABEL
-    if result.confidence:
-        return f"{routed} · {result.confidence}"
-    return routed
-
-
-def _token_band_caption(result: DetectionResult, language: str) -> str:
-    floor = SIGNIFICANT_TOKEN_THRESHOLDS_BY_LANGUAGE[language]
-    ceiling = SHORT_LOW_CONFIDENCE_MAX_TOKENS_BY_LANGUAGE[language]
-    counted = "not counted" if result.token_count is None else str(result.token_count)
-    return (
-        f"Significant tokens: {counted}. {language} floor {floor} "
-        f"(below → insufficient_evidence); short-code low-confidence band "
-        f"{floor}–{ceiling}."
-    )
 
 
 def _styles() -> None:
