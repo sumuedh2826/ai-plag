@@ -73,6 +73,7 @@ PROJECTION_PROMPT_TOKENS = 750
 PROJECTION_COMPLETION_TOKENS = 260
 USD_PER_MILLION_BY_MODEL = {
     "anthropic/claude-haiku-4.5": (1.00, 5.00),
+    "openai/gpt-5.6-luna": (0.20, 1.20),
     "openai/gpt-5.5": (5.00, 30.00),
     "google/gemini-3.7-flash": (0.75, 3.75),
 }
@@ -94,6 +95,7 @@ class CliOptionsV2:
     dry_run: bool
     retry_failed: bool
     budget_usd: float | None
+    retry_salt: int = 0
 
 
 @dataclass(frozen=True)
@@ -128,6 +130,10 @@ def main() -> int:
     selected = _limit_questions(_load_selected_questions(SELECTED_500_PATH), options.limit)
     units = _build_units(selected, models)
     pending = _pending_units(units, options.retry_failed)
+    if options.retry_salt:
+        # A deterministic temperature reproduces the same failure on retry; re-draw
+        # it from the same band under a salt so the retry is different but repeatable.
+        pending = [_resalt_temperature(unit, options.retry_salt) for unit in pending]
     projected = _projected_cost(pending)
 
     print(f"refs_v2 plan: {len(units)} units, {len(pending)} pending, models={list(models)}")
@@ -170,6 +176,7 @@ def _parse_cli_options() -> CliOptionsV2:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--budget-usd", type=float, default=None)
+    parser.add_argument("--retry-salt", type=int, default=0)
     args = parser.parse_args()
     return CliOptionsV2(
         limit=args.limit,
@@ -177,6 +184,7 @@ def _parse_cli_options() -> CliOptionsV2:
         dry_run=args.dry_run,
         retry_failed=args.retry_failed,
         budget_usd=args.budget_usd,
+        retry_salt=args.retry_salt,
     )
 
 
@@ -200,13 +208,19 @@ def _assignment_seed_v2(question_id: str, language: str) -> int:
     return int(digest[:16], 16)
 
 
-def _persona_model_slots(models: Sequence[str]) -> list[str]:
-    if not models or len(PERSONA_V2_ORDER) % len(models) != 0:
-        raise ValueError("Persona count must divide evenly across models")
-    copies_each = len(PERSONA_V2_ORDER) // len(models)
+def _persona_model_slots(models: Sequence[str], rng: random.Random) -> list[str]:
+    """7 personas over 3 models is 3+2+2. Which model gets the extra slot rotates
+    per (qid, language) so no single model dominates the bank overall."""
+    if not models:
+        raise ValueError("At least one model is required")
+    persona_count = len(PERSONA_V2_ORDER)
+    base, remainder = divmod(persona_count, len(models))
     slots: list[str] = []
     for model in models:
-        slots.extend([model] * copies_each)
+        slots.extend([model] * base)
+    if remainder:
+        for model in rng.sample(list(models), remainder):
+            slots.append(model)
     return slots
 
 
@@ -218,7 +232,7 @@ def _units_for_question_language(
     rng = random.Random(_assignment_seed_v2(question_id, language.value))
     personas = list(PERSONA_V2_ORDER)
     rng.shuffle(personas)
-    slots = _persona_model_slots(models)
+    slots = _persona_model_slots(models, rng)
     rng.shuffle(slots)
     units: list[GenerationUnitV2] = []
     for persona, model in zip(personas, slots):
@@ -246,6 +260,22 @@ def _build_units(
                 _units_for_question_language(question.question_id, language, models)
             )
     return units
+
+
+def _resalt_temperature(unit: GenerationUnitV2, salt: int) -> GenerationUnitV2:
+    digest = sha256(
+        f"{REFS_V2_SEED_SALT}:{salt}:{unit.question_id}:{unit.language.value}:"
+        f"{unit.persona.value}".encode("utf-8")
+    ).hexdigest()
+    rng = random.Random(int(digest[:16], 16))
+    temperature = TEMPERATURE_MIN + rng.random() * (TEMPERATURE_MAX - TEMPERATURE_MIN)
+    return GenerationUnitV2(
+        question_id=unit.question_id,
+        language=unit.language,
+        persona=unit.persona,
+        model=unit.model,
+        temperature=round(temperature, 2) or DEFAULT_TEMPERATURE,
+    )
 
 
 def _unit_output_path(unit: GenerationUnitV2) -> Path:

@@ -14,6 +14,7 @@ from nw_ai_code_detector.config import (
     DATA_DIR,
     EVAL_AI_SOLUTIONS_DIR,
     EVAL_SCORES_PATH,
+    REFERENCE_INDEX_V1_DIR,
     SELECTED_500_PATH,
     load_voyage_settings,
 )
@@ -58,7 +59,7 @@ def main() -> int:
     embedder = VoyageEmbedder(load_voyage_settings())
     batch = embedder.embed_texts([record.text for record in records])
     index = _build_reference_index(records, batch.vectors)
-    index.save()
+    index.save(REFERENCE_INDEX_V1_DIR)
     scored, excluded = _score_eval_items(records, batch.vectors, index)
     _write_scores(scored, excluded, batch)
     _print_results(scored, excluded, batch, time.perf_counter() - started, options.limit)

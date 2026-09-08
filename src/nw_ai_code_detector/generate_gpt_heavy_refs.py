@@ -20,7 +20,7 @@ from nw_ai_code_detector.config import (
     AI_SOLUTIONS_DIR,
     OUTPUTS_DIR,
     OpenRouterSettings,
-    REFERENCE_INDEX_DIR,
+    REFERENCE_INDEX_V1_DIR,
     SELECTED_500_PATH,
     load_openrouter_settings,
     load_voyage_settings,
@@ -485,7 +485,7 @@ def _embed_ok_payloads(payloads: Sequence[Mapping[str, Any]]) -> EmbeddingBatch:
 
 def _rebuild_clusters(extra_payloads: Sequence[Mapping[str, Any]]) -> int:
     grouped = _reference_texts_by_cluster(extra_payloads)
-    manifest = json.loads((REFERENCE_INDEX_DIR / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((REFERENCE_INDEX_V1_DIR / "manifest.json").read_text(encoding="utf-8"))
     cluster_manifest = manifest.get("clusters")
     if not isinstance(cluster_manifest, dict):
         raise RuntimeError("reference_index manifest missing clusters")
@@ -500,7 +500,7 @@ def _rebuild_clusters(extra_payloads: Sequence[Mapping[str, Any]]) -> int:
             "count": len(texts),
         }
         rebuilt += 1
-    _write_json(REFERENCE_INDEX_DIR / "manifest.json", manifest)
+    _write_json(REFERENCE_INDEX_V1_DIR / "manifest.json", manifest)
     return rebuilt
 
 
@@ -548,12 +548,12 @@ def _write_cluster(key: ClusterKey, vectors: np.ndarray) -> None:
     index = faiss.IndexFlatIP(int(vectors.shape[1]))
     index.add(np.ascontiguousarray(vectors, dtype=np.float32))
     stem = key.token.replace(":", "__")
-    faiss.write_index(index, str(REFERENCE_INDEX_DIR / f"{stem}.faiss"))
-    np.save(REFERENCE_INDEX_DIR / f"{stem}.npy", vectors)
+    faiss.write_index(index, str(REFERENCE_INDEX_V1_DIR / f"{stem}.faiss"))
+    np.save(REFERENCE_INDEX_V1_DIR / f"{stem}.npy", vectors)
 
 
 def _refs_per_cluster_distribution() -> dict[str, int]:
-    manifest = json.loads((REFERENCE_INDEX_DIR / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((REFERENCE_INDEX_V1_DIR / "manifest.json").read_text(encoding="utf-8"))
     counts = Counter(str(item["count"]) for item in manifest["clusters"].values())
     return dict(sorted(counts.items()))
 

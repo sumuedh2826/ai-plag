@@ -17,7 +17,7 @@ from nw_ai_code_detector.config import (
     AI_SOLUTIONS_DIR,
     DATA_DIR,
     EVAL_AI_SOLUTIONS_DIR,
-    REFERENCE_INDEX_DIR,
+    REFERENCE_INDEX_V1_DIR,
     load_voyage_settings,
 )
 from nw_ai_code_detector.constants import (
@@ -245,16 +245,16 @@ def _cached_matrix(texts: Sequence[str]) -> np.ndarray:
 
 
 def _persist_cluster(key: ClusterKey, vectors: np.ndarray) -> None:
-    manifest = json.loads((REFERENCE_INDEX_DIR / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((REFERENCE_INDEX_V1_DIR / "manifest.json").read_text(encoding="utf-8"))
     entry = manifest["clusters"][key.token]
     vector_ids = tuple(int(value) for value in entry["vector_ids"])
     cluster = ClusterVectors(key, vector_ids, vectors)
     index = ReferenceIndex.from_clusters((cluster,))
-    index.write_cluster(key, REFERENCE_INDEX_DIR)
+    index.write_cluster(key, REFERENCE_INDEX_V1_DIR)
 
 
 def _assert_cluster_invariants() -> None:
-    manifest = json.loads((REFERENCE_INDEX_DIR / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((REFERENCE_INDEX_V1_DIR / "manifest.json").read_text(encoding="utf-8"))
     clusters = manifest["clusters"]
     if len(clusters) != EXPECTED_MIXED_CLUSTER_COUNT:
         raise RuntimeError(f"Cluster count changed: {len(clusters)}")
@@ -267,7 +267,7 @@ def _assert_cluster_invariants() -> None:
         if token != f"{question_id}:{language}":
             raise RuntimeError(f"Cluster routing token mismatch: {token}")
         stem = token.replace(":", "__")
-        vectors = np.load(REFERENCE_INDEX_DIR / f"{stem}.npy")
+        vectors = np.load(REFERENCE_INDEX_V1_DIR / f"{stem}.npy")
         if vectors.shape[0] != EXPECTED_MIXED_REFERENCES_PER_CLUSTER:
             raise RuntimeError(f"Cluster {token} vector rows changed")
 

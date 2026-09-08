@@ -16,6 +16,10 @@ from nw_ai_code_detector.explanation_card import (
     format_explanation_card,
 )
 from nw_ai_code_detector.discount_layer import CanonicalityAssessment
+import json
+from functools import lru_cache
+
+from nw_ai_code_detector.config import REFERENCE_INDEX_D10_REFERENCES_PATH
 from nw_ai_code_detector.eligibility_data import LoadedSolution, load_solution_records
 from nw_ai_code_detector.embedder import cached_vector_for_text
 from nw_ai_code_detector.index import ClusterKey
@@ -81,18 +85,50 @@ def find_nearest_generated_reference_from_vector(
     )
 
 
+@lru_cache(maxsize=1)
+def bank_reference_texts() -> dict[str, list[LoadedSolution]] | None:
+    """Reference texts bundled with the production bank, in vector-row order."""
+    if not REFERENCE_INDEX_D10_REFERENCES_PATH.is_file():
+        return None
+    payload = json.loads(
+        REFERENCE_INDEX_D10_REFERENCES_PATH.read_text(encoding="utf-8")
+    )
+    out: dict[str, list[LoadedSolution]] = {}
+    for token, refs in payload.items():
+        question_id, language = token.split(":", 1)
+        out[token] = [
+            LoadedSolution(
+                question_id=question_id,
+                language=language,
+                raw_code=None,
+                stripped_code=ref["stripped_code"],
+                parse_ok=True,
+                generator=ref.get("model"),
+                persona=ref.get("persona"),
+                relative_path=f"{token}#{position}",
+                source="d10",
+            )
+            for position, ref in enumerate(refs)
+        ]
+    return out
+
+
 def find_nearest_generated_reference_from_cluster(
     key: ClusterKey,
     stripped_code: str,
     query: Sequence[float],
     reference_vectors: np.ndarray,
 ) -> NearestReferenceMatch | None:
-    cluster_dir = AI_SOLUTIONS_DIR / key.question_id / key.language
-    records = [
-        record
-        for record in load_solution_records(cluster_dir, "mixed_v1")
-        if record.parse_ok and record.stripped_code
-    ]
+    bank = bank_reference_texts()
+    if bank is not None and key.token in bank:
+        records = bank[key.token]
+    else:
+        cluster_dir = AI_SOLUTIONS_DIR / key.question_id / key.language
+        records = [
+            record
+            for record in load_solution_records(cluster_dir, "mixed_v1")
+            if record.parse_ok and record.stripped_code
+        ]
     if not records:
         return None
     if len(records) != int(reference_vectors.shape[0]):

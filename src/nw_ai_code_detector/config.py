@@ -22,7 +22,10 @@ OUTPUTS_DIR = REPO_ROOT / "outputs"
 AI_SOLUTIONS_DIR = DATA_DIR / "ai_solutions"
 EVAL_AI_SOLUTIONS_DIR = DATA_DIR / "eval_ai_solutions"
 EMBEDDING_CACHE_DIR = DATA_DIR / "embedding_cache"
-REFERENCE_INDEX_DIR = OUTPUTS_DIR / "reference_index"
+# v1 bank: retained as the reported baseline and for v1-maintenance scripts.
+REFERENCE_INDEX_V1_DIR = OUTPUTS_DIR / "reference_index"
+# PRODUCTION bank (D10). Serving code reads REFERENCE_INDEX_DIR, so the cutover is here.
+REFERENCE_INDEX_DIR = OUTPUTS_DIR / "reference_index_d10"
 EVAL_SCORES_PATH = OUTPUTS_DIR / "eval_scores.json"
 PROGRESS_LOG_PATH = AI_SOLUTIONS_DIR / "_progress.jsonl"
 SELECTED_500_PATH = OUTPUTS_DIR / "selected_500.json"
@@ -66,6 +69,15 @@ REFERENCE_INDEX_V2_DIR = OUTPUTS_DIR / "reference_index_v2"
 REFERENCE_INDEX_V2_MANIFEST_PATH = OUTPUTS_DIR / "reference_index_v2_manifest.json"
 REFS_V2_REPORT_PATH = OUTPUTS_DIR / "refs_v2_generation_report.json"
 REFS_V2_EVAL_DIR = OUTPUTS_DIR / "reference_index_v2_eval"
+AI_SOLUTIONS_HUMANLIKE_DIR = DATA_DIR / "ai_solutions_v2_humanlike"
+PROGRESS_LOG_HUMANLIKE_PATH = AI_SOLUTIONS_HUMANLIKE_DIR / "_progress.jsonl"
+EVAL_BARE_GPT55_DIR = DATA_DIR / "eval_bare_gpt55"
+# --- D10: the production reference bank (self-contained; no solution dir needed at serve time) ---
+REFERENCE_INDEX_D10_DIR = REFERENCE_INDEX_DIR
+REFERENCE_INDEX_D10_MANIFEST_PATH = REFERENCE_INDEX_D10_DIR / "bank_manifest.json"
+REFERENCE_INDEX_D10_HASHES_PATH = REFERENCE_INDEX_D10_DIR / "reference_hashes.json"
+REFERENCE_INDEX_D10_REFERENCES_PATH = REFERENCE_INDEX_D10_DIR / "reference_texts.json"
+ARCHIVE_DIR = REPO_ROOT / "archive"
 
 
 @dataclass(frozen=True)
@@ -78,6 +90,7 @@ class OpenRouterSettings:
     concurrency: int
     timeout_seconds: int
     anthropic_model: str = ""
+    openai_model_v2: str = ""
 
 
 def load_openrouter_settings() -> OpenRouterSettings:
@@ -97,6 +110,7 @@ def load_openrouter_settings() -> OpenRouterSettings:
         concurrency=concurrency,
         timeout_seconds=timeout_seconds,
         anthropic_model=os.getenv("MODEL_ANTHROPIC", "").strip().strip('"'),
+        openai_model_v2=os.getenv("MODEL_OPENAI_V2", "").strip().strip('"'),
     )
 
 
@@ -135,10 +149,13 @@ def model_slugs(settings: OpenRouterSettings) -> tuple[str, ...]:
 
 
 def model_slugs_v2(settings: OpenRouterSettings) -> tuple[str, ...]:
-    """v2 swaps DeepSeek for Anthropic; Gemini and OpenAI are held constant as controls."""
+    """v2 swaps DeepSeek for Anthropic and uses the free-tier-representative OpenAI
+    slug; Gemini is held constant from v1 as the control arm."""
     if not settings.anthropic_model:
         raise ValueError("Missing required environment variable MODEL_ANTHROPIC")
-    return (settings.gemini_model, settings.anthropic_model, settings.openai_model)
+    if not settings.openai_model_v2:
+        raise ValueError("Missing required environment variable MODEL_OPENAI_V2")
+    return (settings.gemini_model, settings.anthropic_model, settings.openai_model_v2)
 
 
 def _required_env(name: str) -> str:

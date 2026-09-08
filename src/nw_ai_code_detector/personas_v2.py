@@ -19,26 +19,53 @@ REFS_V2_SEED_SALT = "v2"
 
 
 class PersonaV2(str, Enum):
-    SOLVE_GIVE_CODE = "solve_give_code"
-    COMPLETE_FUNCTION = "complete_function"
-    MOST_EFFICIENT = "most_efficient"
-    EVADE_DETECTION = "evade_detection"
-    SHORT_NAMES = "short_names"
     BARE = "bare"
+    SHORT_NAMES = "short_names"
+    EVADE_DETECTION = "evade_detection"
+    MOST_EFFICIENT = "most_efficient"
+    DESCRIPTIVE_NAMES = "descriptive_names"
+    LESS_OBVIOUS = "less_obvious"
+    # Experimental, deliberately NOT part of PERSONA_V2_ORDER so the v2 bank
+    # (6 refs per cluster) is unaffected.
+    HUMANLIKE = "humanlike"
 
 
-# Verbatim persona strings. BARE is deliberately absent: it sends no "Style:" line at all.
+# Verbatim persona strings. BARE is deliberately absent: it sends no "Style:" line
+# at all. This set drops the redundant "solve it" variants that collapsed cluster
+# diversity in earlier probes and keeps only axes that measurably differentiate:
+# naming (short vs descriptive), detector evasion, complexity, and algorithm choice.
 PERSONA_V2_STYLE_DIRECTIVES = {
-    PersonaV2.SOLVE_GIVE_CODE: "Solve this problem. Give me the code.",
-    PersonaV2.COMPLETE_FUNCTION: "Here is the starter code, complete the function.",
-    PersonaV2.MOST_EFFICIENT: "Most efficient solution, best time complexity.",
-    PersonaV2.EVADE_DETECTION: "Write it so an AI-detection tool won't flag it.",
     PersonaV2.SHORT_NAMES: (
         "Give me the solution, use short variable names (one word / short)."
     ),
+    PersonaV2.EVADE_DETECTION: "Write it so an AI-detection tool won't flag it.",
+    PersonaV2.MOST_EFFICIENT: "Most efficient solution, best time complexity.",
+    PersonaV2.DESCRIPTIVE_NAMES: (
+        "Write it with clear, descriptive variable names and a clean, "
+        "conventional structure."
+    ),
+    # Nudges the algorithm, not the quality bar - "must be fully correct" keeps
+    # unexecuted refs from silently polluting the cluster with wrong answers.
+    PersonaV2.LESS_OBVIOUS: (
+        "Solve this using a less obvious approach - if multiple valid algorithms "
+        "exist, choose a less common one. It must be fully correct."
+    ),
+    # "Looks hand-written", NOT "evades a detector" - deliberately a different axis
+    # from EVADE_DETECTION.
+    PersonaV2.HUMANLIKE: (
+        "Write this the way a real developer would naturally write it - natural, "
+        "human style, as if a person wrote it by hand."
+    ),
 }
 
-PERSONA_V2_ORDER = tuple(PersonaV2)
+PERSONA_V2_ORDER = (
+    PersonaV2.BARE,
+    PersonaV2.SHORT_NAMES,
+    PersonaV2.EVADE_DETECTION,
+    PersonaV2.MOST_EFFICIENT,
+    PersonaV2.DESCRIPTIVE_NAMES,
+    PersonaV2.LESS_OBVIOUS,
+)
 
 
 def output_shape_directive_for(question_id: str, language: Language) -> str:

@@ -37,6 +37,36 @@ constraints.txt             # backend-aligned pins for the future in-process app
 
 `data/` and `outputs/` deliberately sit outside the package and are never committed.
 
+## Reference index (production bank)
+
+`config.REFERENCE_INDEX_DIR` points at `outputs/reference_index_d10/`, which is **not in this
+repo**. It is a build artifact (~92 MB), produced by:
+
+```bash
+poetry run python -m nw_ai_code_detector.build_reference_index_d10 --stage embed
+poetry run python -m nw_ai_code_detector.build_reference_index_d10 --stage build
+```
+
+It is kept out of git to keep the repo light, and is intended to ship via S3 and be fetched at
+deploy time.
+
+**The bank contains no student data.** Every text in it is an output of this repo's own
+generators; nothing is read from, derived from, or attributable to a student submission.
+Per `(question_id, language)` cluster it holds only: the embedding vectors, the persona and
+model that generated each reference, that reference's source text, and its content hash.
+No submissions, no user ids, no free-text fields.
+
+One honest nuance: 34 of the 9,423 reference texts are byte-identical to some student
+submission. These are one-line canonical answers (`return sum(arr)`, `len(str(n))`,
+`s.swapcase()`) where any correct solution converges on the same characters — each still
+carries the persona and model that produced it. No student text was ingested; the collision is
+in the answer, not the provenance.
+
+The bank is **self-contained**: it bundles its own vectors, exact-match hashes
+(`reference_hashes.json`) and reference texts (`reference_texts.json`), so serving needs no
+`data/` directory. Rebuilding it, however, does require the generated reference banks under
+`data/`, which are gitignored.
+
 ## Stripper validation
 
 ```bash

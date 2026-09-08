@@ -24,15 +24,20 @@ from nw_ai_code_detector.stripper import Language
 MODELS = (
     "google/gemini-3.7-flash",
     "anthropic/claude-haiku-4.5",
-    "openai/gpt-5.5",
+    "openai/gpt-5.6-luna",
 )
 
 EXACT_PERSONA_STRINGS = {
-    PersonaV2.SOLVE_GIVE_CODE: "Solve this problem. Give me the code.",
-    PersonaV2.COMPLETE_FUNCTION: "Here is the starter code, complete the function.",
-    PersonaV2.MOST_EFFICIENT: "Most efficient solution, best time complexity.",
-    PersonaV2.EVADE_DETECTION: "Write it so an AI-detection tool won't flag it.",
     PersonaV2.SHORT_NAMES: "Give me the solution, use short variable names (one word / short).",
+    PersonaV2.EVADE_DETECTION: "Write it so an AI-detection tool won't flag it.",
+    PersonaV2.MOST_EFFICIENT: "Most efficient solution, best time complexity.",
+    PersonaV2.DESCRIPTIVE_NAMES: (
+        "Write it with clear, descriptive variable names and a clean, conventional structure."
+    ),
+    PersonaV2.LESS_OBVIOUS: (
+        "Solve this using a less obvious approach - if multiple valid algorithms exist, "
+        "choose a less common one. It must be fully correct."
+    ),
 }
 
 
@@ -109,8 +114,9 @@ class AssignmentTests(unittest.TestCase):
             _assignment_seed("q-1", "CPP"),
         )
 
-    def test_each_model_gets_exactly_two_personas(self):
+    def test_six_personas_split_two_each(self):
         units = gen._units_for_question_language("q-1", Language.CPP, MODELS)
+        self.assertEqual(len(units), 6)
         counts = {}
         for unit in units:
             counts[unit.model] = counts.get(unit.model, 0) + 1
@@ -124,9 +130,20 @@ class AssignmentTests(unittest.TestCase):
             sorted(persona.value for persona in PERSONA_V2_ORDER),
         )
 
-    def test_persona_slots_reject_a_model_count_that_does_not_divide_six(self):
+    def test_persona_slots_always_cover_every_persona(self):
+        import random as _random
+
+        for count in (1, 2, 3, 7):
+            models = tuple(f"m{i}" for i in range(count))
+            slots = gen._persona_model_slots(models, _random.Random(0))
+            self.assertEqual(len(slots), len(PERSONA_V2_ORDER))
+            self.assertTrue(set(slots).issubset(set(models)))
+
+    def test_persona_slots_reject_an_empty_model_list(self):
+        import random as _random
+
         with self.assertRaises(ValueError):
-            gen._persona_model_slots(("a", "b", "c", "d"))
+            gen._persona_model_slots((), _random.Random(0))
 
     def test_temperature_stays_in_the_sampled_band(self):
         units = gen._units_for_question_language("q-1", Language.PYTHON, MODELS)
@@ -201,8 +218,8 @@ class BudgetTests(unittest.TestCase):
                 )
         self.assertEqual(len(units), 6000)
         projected = gen._projected_cost(units)
-        self.assertGreater(projected, 15.0)
-        self.assertLess(projected, 45.0)
+        self.assertGreater(projected, 3.0)
+        self.assertLess(projected, 25.0)
 
 
 class HeadroomFetchTests(unittest.TestCase):

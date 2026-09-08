@@ -11,7 +11,7 @@ import numpy as np
 from nw_ai_code_detector.config import (
     AI_SOLUTIONS_DIR,
     DATA_DIR,
-    REFERENCE_INDEX_DIR,
+    REFERENCE_INDEX_V1_DIR,
 )
 from nw_ai_code_detector.constants import (
     GROUPS_KEY,
@@ -156,7 +156,7 @@ def _nearest_ai_reference(
     if query is None:
         return None, "Missing cached embedding; network embedding is forbidden"
     files = _mixed_v1_files(item.question_id, item.language)
-    vector_path = REFERENCE_INDEX_DIR / f"{item.question_id}__{item.language}.npy"
+    vector_path = REFERENCE_INDEX_V1_DIR / f"{item.question_id}__{item.language}.npy"
     if not vector_path.is_file():
         return None, f"Missing mixed-v1 vectors at {vector_path.name}"
     vectors = np.asarray(np.load(vector_path), dtype=np.float32)

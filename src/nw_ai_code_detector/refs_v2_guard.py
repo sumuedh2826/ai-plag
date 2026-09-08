@@ -7,13 +7,13 @@ from pathlib import Path
 from nw_ai_code_detector.config import (
     AI_SOLUTIONS_DIR,
     EVAL_SCORES_PATH,
-    REFERENCE_INDEX_DIR,
+    REFERENCE_INDEX_V1_DIR,
 )
 
 # data/ and outputs/ are gitignored, so git cannot catch an accidental clobber of the
 # v1 bank. Snapshot the cheap identifying artifacts and compare around every v2 stage.
 GUARDED_PATHS = (
-    REFERENCE_INDEX_DIR / "manifest.json",
+    REFERENCE_INDEX_V1_DIR / "manifest.json",
     EVAL_SCORES_PATH,
 )
 SNAPSHOT_PATH = AI_SOLUTIONS_DIR.parent / ".refs_v2_v1_snapshot.json"

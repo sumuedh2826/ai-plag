@@ -26,6 +26,8 @@ from nw_ai_code_detector.embedder import (
     l2_normalize,
 )
 from nw_ai_code_detector.eligibility_data import LoadedSolution, load_solution_records
+from nw_ai_code_detector.build_reference_index_d10 import load_reference_hashes_d10
+from nw_ai_code_detector.similarity_explanation import bank_reference_texts
 from nw_ai_code_detector.index import ClusterKey, ReferenceIndex
 from nw_ai_code_detector.score_query import (
     DetectionResult,
@@ -135,8 +137,14 @@ def questions_for_index(
 
 
 def load_reference_hashes(
-    root: Path = AI_SOLUTIONS_DIR,
+    root: Path | None = None,
 ) -> dict[tuple[str, str], set[str]]:
+    """Exact-match hashes for the production bank.
+
+    D10 ships its own hashes, so serving needs no solution directory. Passing an
+    explicit `root` still walks a solution tree (used by the v1 baseline path)."""
+    if root is None:
+        return load_reference_hashes_d10()
     hashes: dict[tuple[str, str], set[str]] = {}
     for record in load_solution_records(root, "mixed_v1"):
         if not record.parse_ok or not record.stripped_code:
@@ -209,12 +217,17 @@ def _nearest_reference(
 ) -> LoadedSolution | None:
     if query is None:
         return None
-    cluster = AI_SOLUTIONS_DIR / question_id / language
-    records = [
-        record
-        for record in load_solution_records(cluster, "mixed_v1")
-        if record.parse_ok and record.stripped_code
-    ]
+    bank = bank_reference_texts()
+    token = f"{question_id}:{language}"
+    if bank is not None and token in bank:
+        records = bank[token]
+    else:
+        cluster = AI_SOLUTIONS_DIR / question_id / language
+        records = [
+            record
+            for record in load_solution_records(cluster, "mixed_v1")
+            if record.parse_ok and record.stripped_code
+        ]
     vectors = index.get_cluster(ClusterKey(question_id, language)).vectors
     if len(records) != int(vectors.shape[0]):
         raise RuntimeError("Generated reference records do not align with index vectors")

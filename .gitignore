@@ -69,3 +69,9 @@ dist/
 tmp/
 temp/
 *.tmp
+
+# Archived / superseded experiment banks
+archive/
+
+# Demo container build (excluded from the review push)
+demo/Dockerfile
