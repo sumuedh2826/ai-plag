@@ -24,8 +24,13 @@ EVAL_AI_SOLUTIONS_DIR = DATA_DIR / "eval_ai_solutions"
 EMBEDDING_CACHE_DIR = DATA_DIR / "embedding_cache"
 # v1 bank: retained as the reported baseline and for v1-maintenance scripts.
 REFERENCE_INDEX_V1_DIR = OUTPUTS_DIR / "reference_index"
-# PRODUCTION bank (D10). Serving code reads REFERENCE_INDEX_DIR, so the cutover is here.
-REFERENCE_INDEX_DIR = OUTPUTS_DIR / "reference_index_d10"
+# PRODUCTION bank. Serving code reads REFERENCE_INDEX_DIR, so the cutover is here.
+# Currently D10-swap (D10 minus v1:complete_function, plus the d11 hardened ref).
+# D10 remains on disk, pinned below, as the fallback.
+REFERENCE_INDEX_DIR = OUTPUTS_DIR / "reference_index_d10_swap"
+# Side-cars of whichever bank is live. Serving reads these, never the D10-pinned ones.
+ACTIVE_BANK_HASHES_PATH = REFERENCE_INDEX_DIR / "reference_hashes.json"
+ACTIVE_BANK_REFERENCES_PATH = REFERENCE_INDEX_DIR / "reference_texts.json"
 EVAL_SCORES_PATH = OUTPUTS_DIR / "eval_scores.json"
 PROGRESS_LOG_PATH = AI_SOLUTIONS_DIR / "_progress.jsonl"
 SELECTED_500_PATH = OUTPUTS_DIR / "selected_500.json"
@@ -72,12 +77,35 @@ REFS_V2_EVAL_DIR = OUTPUTS_DIR / "reference_index_v2_eval"
 AI_SOLUTIONS_HUMANLIKE_DIR = DATA_DIR / "ai_solutions_v2_humanlike"
 PROGRESS_LOG_HUMANLIKE_PATH = AI_SOLUTIONS_HUMANLIKE_DIR / "_progress.jsonl"
 EVAL_BARE_GPT55_DIR = DATA_DIR / "eval_bare_gpt55"
+# D11 = D10 + one "hardened" gpt-5.5 ref per cluster. D10 is never written by this.
+AI_SOLUTIONS_D11_HARDENED_DIR = DATA_DIR / "ai_solutions_d11_hardened"
+REFERENCE_INDEX_D11_DIR = OUTPUTS_DIR / "reference_index_d11"
+REFERENCE_INDEX_D11_REFERENCES_PATH = REFERENCE_INDEX_D11_DIR / "reference_texts.json"
+D11_COMPARISON_REPORT = OUTPUTS_DIR / "d11_comparison.json"
+# D10-swap: D10 minus v1:complete_function, plus the d11 hardened ref. Self-contained.
+REFERENCE_INDEX_D10SWAP_DIR = OUTPUTS_DIR / "reference_index_d10_swap"
 # --- D10: the production reference bank (self-contained; no solution dir needed at serve time) ---
-REFERENCE_INDEX_D10_DIR = REFERENCE_INDEX_DIR
+# D10: pinned explicitly so it survives as the fallback even when the production
+# pointer moves. These are the SOURCE paths that builders read from.
+REFERENCE_INDEX_D10_DIR = OUTPUTS_DIR / "reference_index_d10"
 REFERENCE_INDEX_D10_MANIFEST_PATH = REFERENCE_INDEX_D10_DIR / "bank_manifest.json"
 REFERENCE_INDEX_D10_HASHES_PATH = REFERENCE_INDEX_D10_DIR / "reference_hashes.json"
 REFERENCE_INDEX_D10_REFERENCES_PATH = REFERENCE_INDEX_D10_DIR / "reference_texts.json"
 ARCHIVE_DIR = REPO_ROOT / "archive"
+# Pre-2022 human solutions, sourced manually, for false-positive validation.
+HUMAN_VALIDATION_DIR = DATA_DIR / "human_validation"
+HUMAN_VALIDATION_MANIFEST = OUTPUTS_DIR / "human_validation_manifest.json"
+HUMAN_VALIDATION_REPORT = OUTPUTS_DIR / "human_validation_report.json"
+# Parallel voyage-code-4 bank, for the embedding-model comparison. The code-3 D10
+# bank above is never written by this path.
+VOYAGE_CODE_4_MODEL = "voyage-code-4"
+REFERENCE_INDEX_D10_CODE4_DIR = OUTPUTS_DIR / "reference_index_d10_code4"
+CODE4_COMPARISON_REPORT = OUTPUTS_DIR / "voyage_code4_comparison.json"
+# Parallel OpenAI text-embedding index (1536-d), for the embedder comparison.
+OPENAI_EMBED_MODEL = "openai/text-embedding-3-small"
+OPENAI_EMBED_CACHE_DIR = DATA_DIR / "embedding_cache_openai"
+REFERENCE_INDEX_D10_OPENAI_DIR = OUTPUTS_DIR / "reference_index_d10_openai"
+OPENAI_EMBED_COMPARISON_REPORT = OUTPUTS_DIR / "openai_embed_comparison.json"
 
 
 @dataclass(frozen=True)

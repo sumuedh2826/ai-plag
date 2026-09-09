@@ -28,6 +28,8 @@ class PersonaV2(str, Enum):
     # Experimental, deliberately NOT part of PERSONA_V2_ORDER so the v2 bank
     # (6 refs per cluster) is unaffected.
     HUMANLIKE = "humanlike"
+    # D11 experiment: a "hardened" ref, also outside PERSONA_V2_ORDER so D10 is unaffected.
+    HARDENED = "hardened"
 
 
 # Verbatim persona strings. BARE is deliberately absent: it sends no "Style:" line
@@ -55,6 +57,11 @@ PERSONA_V2_STYLE_DIRECTIVES = {
     PersonaV2.HUMANLIKE: (
         "Write this the way a real developer would naturally write it - natural, "
         "human style, as if a person wrote it by hand."
+    ),
+    PersonaV2.HARDENED: (
+        "Solve this problem with a fully correct, optimal solution that handles all "
+        "edge cases - the kind of solution you'd give after fixing any failing test "
+        "cases. It must be correct."
     ),
 }
 

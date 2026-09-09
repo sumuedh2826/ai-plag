@@ -36,9 +36,14 @@ from nw_ai_code_detector.score_query import (
 )
 from nw_ai_code_detector.stripper import strip_solution_body
 
-DEMO_PASSWORD_ENV = "DEMO_SHARED_PASSWORD"
 QUESTIONS_PATH_ENV = "DEMO_QUESTIONS_PATH"
-QUESTIONS_PATH_DEFAULT = Path("data/questions.json")
+# The published file carries only the ~500 questions the bank covers, with test
+# cases stripped. The full local dataset is used when present (pipelines need it).
+QUESTIONS_PATH_DEMO = Path("data/questions_demo.json")
+QUESTIONS_PATH_FULL = Path("data/questions.json")
+QUESTIONS_PATH_DEFAULT = (
+    QUESTIONS_PATH_DEMO if QUESTIONS_PATH_DEMO.is_file() else QUESTIONS_PATH_FULL
+)
 
 
 @dataclass(frozen=True)

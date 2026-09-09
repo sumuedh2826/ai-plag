@@ -13,6 +13,7 @@ import numpy as np
 from nw_ai_code_detector.config import (
     AI_SOLUTIONS_DIR,
     AI_SOLUTIONS_V2_DIR,
+    ACTIVE_BANK_HASHES_PATH,
     REFERENCE_INDEX_D10_DIR,
     REFERENCE_INDEX_D10_HASHES_PATH,
     REFERENCE_INDEX_D10_MANIFEST_PATH,
@@ -187,9 +188,11 @@ def _build(groups) -> int:
 
 
 def load_reference_hashes_d10(
-    path: Path = REFERENCE_INDEX_D10_HASHES_PATH,
+    path: Path | None = None,
 ) -> dict[tuple[str, str], set[str]]:
-    """Serve-time exact-match hashes, read from the bank itself."""
+    """Serve-time exact-match hashes, read from whichever bank is live."""
+    if path is None:
+        path = ACTIVE_BANK_HASHES_PATH
     payload = json.loads(path.read_text(encoding="utf-8"))
     out: dict[tuple[str, str], set[str]] = {}
     for token, digests in payload.items():

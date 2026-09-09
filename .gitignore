@@ -4,9 +4,9 @@
 !.env.example
 
 # Generated data and datasets
-data/
+data/*
 datasets/
-outputs/
+outputs/*
 artifacts/
 generated_data/
 generated_solutions/
@@ -75,3 +75,14 @@ archive/
 
 # Demo container build (excluded from the review push)
 demo/Dockerfile
+
+# ------------------------------------------------------------------
+# PUBLIC PUSH: re-include EXACTLY two things, nothing else.
+# These negations come last so they override the extension rules above
+# (*.npy / *.faiss / *.json would otherwise still exclude the bank files).
+# Scoped to one bank on purpose: a broad `!outputs/` would drag in D10,
+# v1, D11 and the code-4 experiment.
+# ------------------------------------------------------------------
+!outputs/reference_index_d10_swap/
+!outputs/reference_index_d10_swap/**
+!data/questions_demo.json

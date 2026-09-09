@@ -170,19 +170,26 @@ COMMENTED_OUT_CODE_DISCOUNT = 0.12
 HIGH_AI_SCORE_FLOOR = 0.98
 HIGH_CONFIDENCE_LABEL = "high_confidence"
 DESCRIPTIVE_RAISE_FLOOR = 0.42
+# Operating point, per language. Derived as the zero-false-positive threshold over
+# the confidently-labeled humans (max nn_max, d286afd6 excluded as unsure), then
+# raised slightly for student safety: CPP +0.0010, PYTHON +0.0020.
+# This is the single source of truth: the display midpoint below is pinned to it so
+# "50% = the flag line" is exactly true. Previously the CPP display midpoint
+# (0.9786496) disagreed with the evaluation threshold (0.9809274).
+FLAG_THRESHOLD_BY_LANGUAGE = {
+    "CPP": 0.9819274,
+    "PYTHON": 0.9700251,
+}
 # PROVISIONAL display mapping only. Flagging still uses the raw locked score.
-# Midpoint is T_zero_fp (labeled-human median maps to ~25%, threshold to 50%,
-# cosine 1.0 to 100%). Python anchors rest on 5 scoreable humans.
+# Midpoint is the flag threshold (labeled-human median maps to ~25%, threshold to
+# 50%, cosine 1.0 to 100%). Python anchors rest on 5 scoreable humans.
 DISPLAY_MATCH_PERCENT_MIN = 0
 DISPLAY_MATCH_PERCENT_MAX = 100
 DISPLAY_MATCH_PERCENT_MIDPOINT = 50
 DISPLAY_MATCH_PERCENT_MEDIUM_MIN = 25
 DISPLAY_MATCH_PERCENT_BELOW_THRESHOLD_MAX = 49
 DISPLAY_MATCH_HIGH_SCORE = 1.0
-DISPLAY_MATCH_MIDPOINT_SCORE_BY_LANGUAGE = {
-    "CPP": 0.9786496162414552,
-    "PYTHON": 0.9680252075195314,
-}
+DISPLAY_MATCH_MIDPOINT_SCORE_BY_LANGUAGE = dict(FLAG_THRESHOLD_BY_LANGUAGE)
 DISPLAY_MATCH_LOW_SCORE_BY_LANGUAGE = {
     "CPP": 0.9212929606437682,
     "PYTHON": 0.8960224390029906,

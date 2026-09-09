@@ -19,7 +19,7 @@ from nw_ai_code_detector.discount_layer import CanonicalityAssessment
 import json
 from functools import lru_cache
 
-from nw_ai_code_detector.config import REFERENCE_INDEX_D10_REFERENCES_PATH
+from nw_ai_code_detector.config import ACTIVE_BANK_REFERENCES_PATH
 from nw_ai_code_detector.eligibility_data import LoadedSolution, load_solution_records
 from nw_ai_code_detector.embedder import cached_vector_for_text
 from nw_ai_code_detector.index import ClusterKey
@@ -88,10 +88,10 @@ def find_nearest_generated_reference_from_vector(
 @lru_cache(maxsize=1)
 def bank_reference_texts() -> dict[str, list[LoadedSolution]] | None:
     """Reference texts bundled with the production bank, in vector-row order."""
-    if not REFERENCE_INDEX_D10_REFERENCES_PATH.is_file():
+    if not ACTIVE_BANK_REFERENCES_PATH.is_file():
         return None
     payload = json.loads(
-        REFERENCE_INDEX_D10_REFERENCES_PATH.read_text(encoding="utf-8")
+        ACTIVE_BANK_REFERENCES_PATH.read_text(encoding="utf-8")
     )
     out: dict[str, list[LoadedSolution]] = {}
     for token, refs in payload.items():

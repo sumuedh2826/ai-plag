@@ -17,11 +17,11 @@ import os
 from typing import Any
 
 from nw_ai_code_detector.constants import (
+    CLUSTER_LOW_DIVERSITY_DISTANCE as FLOOR_NOT_SCORED,
     INSUFFICIENT_EVIDENCE_STATUS,
     LOW_CONFIDENCE_SHORT_STATUS,
     LOW_CONFIDENCE_STATUS,
     MISSING_OR_INVALID_STATUS,
-    QUESTION_SOLUTION_FEW_DIVERSITY_MAX,
     SCORED_STATUS,
 )
 
@@ -36,6 +36,29 @@ POLISH_SYSTEM_PROMPT = (
     "never as proof of authorship or copying; brief, natural, and help the reviewer "
     "know what to consider."
 )
+
+# Display-only vendor names. The real slug stays in the bank manifest and the logs;
+# a reviewer has no use for "gemini-3.7-flash" and it dates the bank unnecessarily.
+VENDOR_BY_PREFIX = (
+    ("openai/", "ChatGPT"),
+    ("anthropic/", "Anthropic"),
+    ("deepseek/", "DeepSeek"),
+    ("google/gemini", "Gemini"),
+)
+VENDOR_FALLBACK = "an AI model"
+
+
+def vendor_name(model_slug: str | None) -> str:
+    """Clean vendor label for a model slug. Unknown vendors degrade to a neutral
+    phrase rather than leaking an internal identifier."""
+    if not model_slug:
+        return VENDOR_FALLBACK
+    slug = model_slug.strip().lower()
+    for prefix, name in VENDOR_BY_PREFIX:
+        if slug.startswith(prefix):
+            return name
+    return VENDOR_FALLBACK
+
 
 REVIEWER_QUESTION = (
     "Does this submission use the same approach, structure, and step order as the "
@@ -86,49 +109,90 @@ def is_low_confidence(status: str) -> bool:
 
 # --- structured facts (the only thing the LLM ever sees) --------------------
 
-SIMILARITY_SENTENCE = {
-    "high": "This submission is highly similar in structure to AI-generated solutions "
-            "for this problem.",
-    "medium": "This submission is moderately similar in structure to AI-generated "
-              "solutions for this problem.",
-    "low": "This submission is only slightly similar in structure to AI-generated "
-           "solutions for this problem.",
+# Wording follows the band so the sentence and the colour can never disagree.
+SIMILARITY_BY_BAND = {
+    "red": "Strong similarity in structure to AI-generated solutions for this "
+           "problem - flagged for review.",
+    "yellow": "Similarity to AI-generated solutions for this problem is borderline - "
+              "review carefully.",
+    "green": "Limited similarity to AI-generated solutions for this problem - "
+             "not flagged.",
 }
+# Three bands, keyed to the SCORING floor so the message can't contradict the flag.
+#   below 0.030  -> not scored at all; the strong wording is safe there
+#   0.030-0.050  -> scored, but few approaches; soften rather than undercut the flag
+#   above 0.050  -> scored and varied; a close match is genuinely notable
+# The previous single 0.060 cutoff sat above the 0.030 scoring floor, so two thirds of
+# flagged submissions were told "essentially one common solution" alongside their flag.
+CANONICAL_WORDING_MAX = 0.050
 CANONICAL_TIGHT = (
-    "This problem has essentially one common solution, so high similarity is expected "
-    "and less meaningful."
+    "This problem has essentially one common solution, so a match isn't meaningful."
+)
+CANONICAL_FEW = (
+    "This problem has relatively few distinct valid approaches, so weigh the "
+    "structural match accordingly."
 )
 CANONICAL_VARIED = (
     "This problem has many valid approaches, so a close match is more notable."
 )
 
+
+def canonicality_sentence(cluster_diversity: float | None, scored: bool) -> str | None:
+    if cluster_diversity is None:
+        return None
+    if not scored and cluster_diversity < FLOOR_NOT_SCORED:
+        return CANONICAL_TIGHT
+    if cluster_diversity <= CANONICAL_WORDING_MAX:
+        return CANONICAL_FEW
+    return CANONICAL_VARIED
+
 HEADINGS = {
     "similarity": "Overall Similarity",
     "question_canonicality": "How Canonical This Question Is",
+    "naming": "Naming",
     "scoring_status": "Scoring Status",
     "human_signals": "Human-Leaning Signals",
 }
+
+# Descriptive-naming share over DISTINCT local bindings only (fields, methods, types
+# and parameters excluded by local_binding_names).
+NAMING_DESCRIPTIVE_MIN = 0.45
+NAMING_DESCRIPTIVE_TEXT = (
+    "Uses many descriptive variable names, which is consistent with AI-generated code."
+)
+NAMING_PLAIN_TEXT = (
+    "Variable names don't obviously suggest AI, but the structure still matches - "
+    "review alongside the other signals."
+)
+
+
+def naming_note(frac_descriptive: float | None, flagged: bool) -> str | None:
+    """Context for a flag, never a reason for one. Shown only when flagged."""
+    if not flagged or frac_descriptive is None:
+        return None
+    return (NAMING_DESCRIPTIVE_TEXT if frac_descriptive >= NAMING_DESCRIPTIVE_MIN
+            else NAMING_PLAIN_TEXT)
 
 
 def explanation_facts(
     *,
     status: str,
-    match_level: str | None,
+    band: str,
     cluster_diversity: float | None,
     commented_out_code: bool,
+    scored: bool,
+    frac_descriptive: float | None = None,
+    flagged: bool = False,
 ) -> dict[str, Any]:
     headline, reason = plain_status(status)
-    tight = (
-        cluster_diversity is not None
-        and cluster_diversity <= QUESTION_SOLUTION_FEW_DIVERSITY_MAX
-    )
     facts: dict[str, Any] = {
-        "similarity": SIMILARITY_SENTENCE.get(match_level) if match_level else None,
-        "question_canonicality": CANONICAL_TIGHT if tight else CANONICAL_VARIED,
+        "similarity": SIMILARITY_BY_BAND.get(band),
+        "question_canonicality": canonicality_sentence(cluster_diversity, scored),
+        "naming": naming_note(frac_descriptive, flagged),
         "scoring_status": reason or "Scored normally.",
         "confidence": plain_confidence(status),
         "human_signals": (
-            "Contains commented-out code (a debugging trace), which leans human."
+            "Contains commented-out code - a debugging trace, leans human - weigh accordingly."
             if commented_out_code else None
         ),
     }
@@ -143,13 +207,37 @@ def _sections(facts: dict[str, Any]) -> list[tuple[str, str, str]]:
     if facts.get("question_canonicality"):
         out.append(("question_canonicality", HEADINGS["question_canonicality"],
                     facts["question_canonicality"]))
-    status_line = facts["scoring_status"]
+    if facts.get("naming"):
+        out.append(("naming", HEADINGS["naming"], facts["naming"]))
+    status_line = facts.get("scoring_status") or "Scored normally."
     if facts.get("confidence"):
         status_line = f"{status_line} {facts['confidence']}."
     out.append(("scoring_status", HEADINGS["scoring_status"], status_line))
     if facts.get("human_signals"):
         out.append(("human_signals", HEADINGS["human_signals"], facts["human_signals"]))
     return out
+
+
+NOT_SCORED_GUIDANCE = (
+    "No similarity comparison is available for this submission, so there is nothing "
+    "to compare against the AI reference set."
+)
+
+
+def guidance_lines(facts: dict[str, Any], scored: bool) -> list[str]:
+    """Body of the 'What to look at' panel. Pure, so the not-scored path is testable
+    without Streamlit. Every lookup is a safe .get(): a not-scored submission has no
+    similarity, canonicality or naming facts at all."""
+    if not scored:
+        reason = facts.get("scoring_status")
+        return [reason, NOT_SCORED_GUIDANCE] if reason else [NOT_SCORED_GUIDANCE]
+    return [
+        line for line in (
+            facts.get("similarity"),
+            facts.get("question_canonicality"),
+            facts.get("human_signals"),
+        ) if line
+    ]
 
 
 def hardcoded_sentences(facts: dict[str, Any]) -> list[tuple[str, str]]:
