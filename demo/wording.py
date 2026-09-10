@@ -151,8 +151,15 @@ HEADINGS = {
     "question_canonicality": "How Canonical This Question Is",
     "naming": "Naming",
     "scoring_status": "Scoring Status",
-    "human_signals": "Human-Leaning Signals",
 }
+
+# Appended to the similarity verdict rather than given its own section, so a whole
+# heading doesn't appear and disappear between submissions. Phrased as a mitigating
+# factor to weigh next to the verdict, not as a contradiction of it.
+COMMENTED_OUT_CAVEAT = (
+    "Note: it also contains commented-out code - a debugging trace, which leans "
+    "human - weigh that alongside."
+)
 
 # Descriptive-naming share over DISTINCT local bindings only (fields, methods, types
 # and parameters excluded by local_binding_names).
@@ -191,11 +198,11 @@ def explanation_facts(
         "naming": naming_note(frac_descriptive, flagged),
         "scoring_status": reason or "Scored normally.",
         "confidence": plain_confidence(status),
-        "human_signals": (
-            "Contains commented-out code - a debugging trace, leans human - weigh accordingly."
-            if commented_out_code else None
-        ),
     }
+    # The caveat rides on the verdict line. With no verdict (not scored) there is
+    # nothing for it to qualify, so it is not shown.
+    if commented_out_code and facts.get("similarity"):
+        facts["similarity"] = f"{facts['similarity']} {COMMENTED_OUT_CAVEAT}"
     return {k: v for k, v in facts.items() if v is not None}
 
 
@@ -213,8 +220,6 @@ def _sections(facts: dict[str, Any]) -> list[tuple[str, str, str]]:
     if facts.get("confidence"):
         status_line = f"{status_line} {facts['confidence']}."
     out.append(("scoring_status", HEADINGS["scoring_status"], status_line))
-    if facts.get("human_signals"):
-        out.append(("human_signals", HEADINGS["human_signals"], facts["human_signals"]))
     return out
 
 
@@ -235,7 +240,6 @@ def guidance_lines(facts: dict[str, Any], scored: bool) -> list[str]:
         line for line in (
             facts.get("similarity"),
             facts.get("question_canonicality"),
-            facts.get("human_signals"),
         ) if line
     ]
 
@@ -291,6 +295,24 @@ def polish_facts(facts: dict[str, Any]) -> list[tuple[str, str]] | None:
     out: list[tuple[str, str]] = []
     for key, heading, fallback in sections:
         sentence = parsed.get(key)
-        out.append((heading, sentence.strip()
-                    if isinstance(sentence, str) and sentence.strip() else fallback))
+        if not (isinstance(sentence, str) and sentence.strip()):
+            out.append((heading, fallback)); continue
+        sentence = sentence.strip()
+        if _dropped_a_fact(fallback, sentence):
+            sentence = fallback
+        out.append((heading, sentence))
     return out or None
+
+
+# Facts the model has been observed to silently omit when rephrasing. Losing the
+# commented-out-code caveat would delete a human-leaning mitigation from the verdict,
+# so a rewrite that drops it is rejected in favour of the plain sentence.
+REQUIRED_CUES = (("commented-out", ("comment", "debug")),)
+
+
+def _dropped_a_fact(original: str, rewritten: str) -> bool:
+    low_original, low_rewritten = original.lower(), rewritten.lower()
+    for marker, cues in REQUIRED_CUES:
+        if marker in low_original and not any(c in low_rewritten for c in cues):
+            return True
+    return False

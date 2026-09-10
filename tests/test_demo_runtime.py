@@ -219,6 +219,49 @@ class NamingLayerTests(unittest.TestCase):
         self.assertIn("descriptive", naming_note(0.45, flagged=True))
         self.assertIn("don't obviously suggest AI", naming_note(0.44, flagged=True))
 
+    def test_commented_out_caveat_rides_on_the_verdict_line(self):
+        from demo.wording import COMMENTED_OUT_CAVEAT, explanation_facts, hardcoded_sentences
+
+        for band, flagged in (("red", True), ("yellow", True), ("green", False)):
+            facts = explanation_facts(
+                status=SCORED_STATUS, band=band, cluster_diversity=0.09,
+                commented_out_code=True, scored=True, flagged=flagged,
+            )
+            sections = dict(hardcoded_sentences(facts))
+            # it lives inside Overall Similarity, not its own section
+            self.assertIn(COMMENTED_OUT_CAVEAT, sections["Overall Similarity"])
+            self.assertNotIn("Human-Leaning Signals", sections)
+
+    def test_no_caveat_when_no_commented_out_code(self):
+        from demo.wording import explanation_facts, hardcoded_sentences
+
+        facts = explanation_facts(
+            status=SCORED_STATUS, band="red", cluster_diversity=0.09,
+            commented_out_code=False, scored=True, flagged=True,
+        )
+        text = " ".join(s for _h, s in hardcoded_sentences(facts))
+        self.assertNotIn("commented-out", text)
+
+    def test_caveat_is_omitted_when_there_is_no_verdict_to_qualify(self):
+        from demo.wording import explanation_facts, hardcoded_sentences
+
+        facts = explanation_facts(
+            status=INSUFFICIENT_EVIDENCE_STATUS, band="unscored", cluster_diversity=None,
+            commented_out_code=True, scored=False, flagged=False,
+        )
+        text = " ".join(s for _h, s in hardcoded_sentences(facts))
+        self.assertNotIn("commented-out", text)
+
+    def test_polish_falls_back_if_the_model_drops_the_caveat(self):
+        from demo.wording import _dropped_a_fact
+
+        original = ("Limited similarity - not flagged. Note: it also contains "
+                    "commented-out code - a debugging trace, which leans human.")
+        self.assertTrue(_dropped_a_fact(original, "Limited similarity, not flagged."))
+        self.assertFalse(_dropped_a_fact(original, "Limited similarity; commented-out code present."))
+        self.assertFalse(_dropped_a_fact(original, "Limited similarity; a debugging trace is present."))
+        self.assertFalse(_dropped_a_fact("Strong similarity - flagged.", "Strong similarity, flagged."))
+
     def test_naming_never_claims_to_be_the_reason_for_the_flag(self):
         from demo.wording import naming_note
 
